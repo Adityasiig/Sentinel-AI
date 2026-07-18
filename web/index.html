@@ -280,6 +280,34 @@ button{font-family:inherit}
 @keyframes spin{to{transform:rotate(360deg)}}
 .count{font-variant-numeric:tabular-nums}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+/* ── incidents / advisor ── */
+.adv-note{display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,rgba(79,124,255,.08),rgba(56,189,248,.03));border:1px solid rgba(79,124,255,.18);border-radius:14px;padding:14px 18px;margin-bottom:20px}
+.adv-note .an-ico{width:34px;height:34px;flex:0 0 34px;display:grid;place-items:center;border-radius:10px;background:rgba(79,124,255,.14);color:var(--accent)}
+.adv-note b{color:var(--text)} .adv-note p{color:var(--muted);font-size:12.5px;margin-top:2px}
+.inc{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px 18px 24px;margin-bottom:14px;overflow:hidden}
+.inc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
+.inc.sev-critical::before{background:var(--crit)} .inc.sev-warning::before{background:var(--warn)}
+.inc.sev-unknown::before{background:var(--unknown)} .inc.sev-info::before{background:var(--accent-2)}
+.inc-top{display:flex;align-items:center;gap:12px}
+.inc-name{font-size:15px;font-weight:800;display:flex;align-items:center;gap:9px}
+.inc-sub{color:var(--muted);font-size:12px;margin-top:3px}
+.inc-badge{margin-left:auto;font-size:10px;font-weight:800;letter-spacing:.05em;padding:3px 9px;border-radius:7px;text-transform:uppercase}
+.b-critical{color:var(--crit);background:rgba(244,63,94,.12);border:1px solid rgba(244,63,94,.25)}
+.b-warning{color:var(--warn);background:rgba(250,204,21,.12);border:1px solid rgba(250,204,21,.25)}
+.b-unknown{color:var(--unknown);background:rgba(100,116,139,.14);border:1px solid rgba(100,116,139,.28)}
+.inc-diag{color:var(--text);font-size:13.5px;line-height:1.55;margin:13px 0 4px}
+.inc-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.inc-tag{font-size:11px;font-weight:700;color:var(--muted);background:rgba(148,163,184,.08);border:1px solid var(--line);padding:3px 9px;border-radius:7px;display:inline-flex;align-items:center;gap:6px}
+.inc-tag.destr{color:var(--crit);background:rgba(244,63,94,.09);border-color:rgba(244,63,94,.22)}
+.inc-fix{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:rgba(7,11,20,.5)}
+.fix-head{display:flex;align-items:center;gap:10px;padding:9px 13px;border-bottom:1px solid var(--line);font-size:11.5px;font-weight:700;color:var(--muted)}
+.fix-head .fh-t{display:inline-flex;align-items:center;gap:7px;color:var(--text)}
+.fix-head .btn{margin-left:auto}
+.inc-fix pre{margin:0;padding:13px 15px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;line-height:1.6;color:#cbd5e1;white-space:pre-wrap;word-break:break-word}
+.fix-verify{padding:8px 15px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
+.inc-nofix{margin-top:13px;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--unknown);background:rgba(100,116,139,.07);border:1px dashed rgba(100,116,139,.3);border-radius:11px;padding:11px 14px}
+.navcount{font-size:9px;font-weight:800;color:var(--crit);background:rgba(244,63,94,.14);border:1px solid rgba(244,63,94,.28);padding:2px 6px;border-radius:6px}
 </style>
 </head>
 <body>
@@ -325,7 +353,7 @@ button{font-family:inherit}
       <div class="nav-item" data-view="servers" onclick="go('servers')"><i data-lucide="server"></i><span class="txt">Servers</span></div>
       <div class="nav-item" data-view="topology" onclick="go('topology')"><i data-lucide="network"></i><span class="txt">Topology</span></div>
       <div class="side-label">Operations</div>
-      <div class="nav-item" data-view="incidents" onclick="go('incidents')"><i data-lucide="siren"></i><span class="txt">Incidents</span><span class="soon">SOON</span></div>
+      <div class="nav-item" data-view="incidents" onclick="go('incidents')"><i data-lucide="siren"></i><span class="txt">Incidents</span><span class="navcount hidden" id="incCount">0</span></div>
       <div class="nav-item" data-view="logs" onclick="go('logs')"><i data-lucide="scroll-text"></i><span class="txt">Logs</span><span class="soon">SOON</span></div>
       <div class="nav-item" data-view="calls" onclick="go('calls')"><i data-lucide="phone-call"></i><span class="txt">Calls</span><span class="soon">SOON</span></div>
       <div class="nav-item" data-view="routes" onclick="go('routes')"><i data-lucide="route"></i><span class="txt">Routes</span><span class="soon">SOON</span></div>
@@ -357,6 +385,7 @@ button{font-family:inherit}
 let TOKEN = localStorage.getItem('pulse_token') || '';
 let FLEET = null;              // last /api/fleet payload
 let STATUS = null;             // last /api/status payload
+let INCIDENTS = null;          // last /api/incidents payload (advisor feed)
 let VIEW = 'overview';
 let PREV_STATUS = {};          // hostname -> status (for transition toasts)
 let HEALTH_SERIES = [];        // rolling fleet health % for the overview sparkline
@@ -456,6 +485,7 @@ function render(){
   if(VIEW==='overview')      m.innerHTML=renderOverview();
   else if(VIEW==='servers')  m.innerHTML=renderServers();
   else if(VIEW==='topology') { m.innerHTML=renderTopologyShell(); drawTopology(); }
+  else if(VIEW==='incidents')m.innerHTML=renderIncidents();
   else                       m.innerHTML=renderEmpty(VIEW);
   icon();
   if(VIEW==='overview' && FLEET) paintOverviewCounts();
@@ -635,7 +665,6 @@ function drawTopology(){
 /* ══════════════════════════ EMPTY (Phase 2) ══════════════════════════ */
 function renderEmpty(v){
   const meta={
-    incidents:['siren','Incident timeline','Auto-detected incidents with a live timeline, evidence cards and remediation history will land here when the auto-heal engine ships.'],
     logs:['scroll-text','Unified logs','Streaming, searchable logs from every FreeSWITCH, OpenSIPS and VOS3000 box in one pane.'],
     calls:['phone-call','Live calls','Real-time call volume, ASR/ACD and MOS quality across the fleet.'],
     routes:['route','Route health','Per-carrier route status, failover state and cost — mapped to live call outcomes.'],
@@ -645,6 +674,64 @@ function renderEmpty(v){
     +'<div class="card"><div class="empty"><div class="ill"><i data-lucide="'+meta[0]+'"></i></div>'
     +'<h3>'+meta[1]+'</h3><p>'+meta[2]+'</p>'
     +'<div class="phase"><i data-lucide="rocket" style="width:13px;height:13px"></i>Phase 2 — read-only observer ships first</div></div></div></div>';
+}
+
+/* ══════════════════════════ INCIDENTS (Advisor) ══════════════════════════ */
+function copyEl(id,btn){
+  const el=document.getElementById(id); if(!el) return;
+  navigator.clipboard.writeText(el.textContent).then(()=>toast('ok','Command copied','Paste into your SSH session on the target host'));
+}
+function renderIncidents(){
+  let h='<div class="view"><div class="page-head"><div><h1>Incidents</h1>'
+    +'<p>Advisor — known failures matched to a vetted fix · read-only</p></div>'
+    +'<button class="btn sm" onclick="manualRefresh(this)"><i data-lucide="refresh-cw"></i>Refresh</button></div>';
+
+  if(!INCIDENTS){ return h+skelGrid(3,'')+'</div>'; }
+
+  // advisor-mode explainer (why nothing auto-runs)
+  h+='<div class="adv-note"><div class="an-ico"><i data-lucide="shield-check"></i></div>'
+    +'<div><b>Advisor mode — Pulse recommends, it does not execute.</b>'
+    +'<p>Each incident carries the exact vetted fix. Run it yourself on the host, or wait for Phase&nbsp;3 (governed auto-heal). Remediation is currently '
+    +'<b style="color:var(--'+(INCIDENTS.remediation_enabled?'ok':'crit')+')">'+(INCIDENTS.remediation_enabled?'ENABLED':'DISABLED')+'</b>.</p></div></div>';
+
+  const list=INCIDENTS.incidents||[];
+  if(!list.length){
+    return h+'<div class="card"><div class="empty"><div class="ill" style="color:var(--ok)"><i data-lucide="shield-check"></i></div>'
+      +'<h3>All clear</h3><p>No known failures matched across the fleet. The advisor is watching every sweep.</p></div></div></div>';
+  }
+
+  for(const inc of list){
+    const a=inc.advisory, sev=a.severity||'unknown';
+    const needsHuman=inc.status==='needs-human';
+    h+='<div class="inc sev-'+esc(sev)+'">';
+    h+='<div class="inc-top">'
+      +'<div style="flex:1;min-width:0"><div class="inc-name">'+esc(inc.hostname)
+      +'<span class="role-tag tag-'+esc(inc.role)+'">'+esc(inc.role)+'</span></div>'
+      +'<div class="inc-sub">'+esc(inc.ip)+' · '+(ROLE_NAME[inc.role]||inc.role)+' · opened '+ago(inc.opened_ts)+'</div></div>'
+      +'<span class="inc-badge b-'+esc(sev)+'">'+esc(needsHuman?'needs human':sev)+'</span></div>';
+
+    h+='<div class="inc-diag">'+esc(a.diagnose||'')+'</div>';
+
+    h+='<div class="inc-meta">'
+      +'<span class="inc-tag"><i data-lucide="'+(needsHuman?'help-circle':'book-open-check')+'" style="width:12px;height:12px"></i>'
+      +esc(needsHuman?'no vetted playbook':('playbook: '+a.id))+'</span>';
+    if(a.destructive) h+='<span class="inc-tag destr"><i data-lucide="alert-triangle" style="width:12px;height:12px"></i>destructive fix</span>';
+    h+='<button class="inc-tag" style="cursor:pointer" onclick="openHost(\''+esc(inc.hostname)+'\')"><i data-lucide="activity" style="width:12px;height:12px"></i>inspect host</button>';
+    h+='</div>';
+
+    if(a.command){
+      const cid='inc-cmd-'+inc.id;
+      h+='<div class="inc-fix"><div class="fix-head"><span class="fh-t"><i data-lucide="wrench" style="width:13px;height:13px"></i>Recommended fix</span>'
+        +'<button class="btn sm" onclick="copyEl(\''+cid+'\',this)"><i data-lucide="copy"></i>Copy</button></div>'
+        +'<pre id="'+cid+'">'+esc(a.command)+'</pre>';
+      if(a.verify&&a.verify.probe) h+='<div class="fix-verify"><i data-lucide="check-check" style="width:12px;height:12px"></i>Verify: probe <b style="color:var(--text)">&nbsp;'+esc(a.verify.probe)+'</b>&nbsp; expected <b style="color:var(--ok)">'+esc(a.verify.expect)+'</b></div>';
+      h+='</div>';
+    } else {
+      h+='<div class="inc-nofix"><i data-lucide="user-cog" style="width:15px;height:15px"></i>No vetted fix — this failure needs human triage before any action.</div>';
+    }
+    h+='</div>';
+  }
+  return h+'</div>';
 }
 /* ══════════════════════════ DRAWER ══════════════════════════ */
 async function openHost(name){
@@ -733,7 +820,7 @@ function closeCmd(){ document.getElementById('cmdk').classList.remove('show'); }
 function buildCmds(q){
   q=q.trim().toLowerCase();
   const nav=[['overview','layout-dashboard','Overview','Fleet summary'],['servers','server','Servers','All hosts'],
-    ['topology','network','Topology','Fleet map']];
+    ['topology','network','Topology','Fleet map'],['incidents','siren','Incidents','Advisor & vetted fixes']];
   let groups=[];
   const navItems=nav.filter(n=>!q||n[2].toLowerCase().includes(q)).map(n=>({icon:n[1],t:n[2],s:n[3],run:()=>go(n[0])}));
   if(navItems.length) groups.push(['Navigate',navItems]);
@@ -799,22 +886,28 @@ function detectTransitions(hosts){
 }
 async function refresh(force){
   try{
-    const [st,data]=await Promise.all([api('/api/status'),api('/api/fleet')]);
-    STATUS=st; FLEET=data;
+    const [st,data,inc]=await Promise.all([
+      api('/api/status'), api('/api/fleet'),
+      api('/api/incidents').catch(()=>({incidents:[],count:0,remediation_enabled:false}))
+    ]);
+    STATUS=st; FLEET=data; INCIDENTS=inc;
     // health series point
     const pct=data.totals.hosts?Math.round(data.totals.ok/data.totals.hosts*100):0;
     const now=new Date().toLocaleTimeString('en-GB');
     if(!HEALTH_SERIES.length||HEALTH_SERIES[HEALTH_SERIES.length-1].t!==now) HEALTH_SERIES.push({t:now,v:data.totals.ok});
     if(HEALTH_SERIES.length>60) HEALTH_SERIES.shift();
-    // notif badge
-    const alerts=data.totals.crit+data.totals.warn;
+    // incident badges (bell + sidebar count both track open incidents)
+    const nOpen=inc.count||0;
     const b=document.getElementById('notifBadge');
-    if(alerts){ b.textContent=alerts; b.classList.remove('hidden'); } else b.classList.add('hidden');
+    if(nOpen){ b.textContent=nOpen; b.classList.remove('hidden'); } else b.classList.add('hidden');
+    const nc=document.getElementById('incCount');
+    if(nc){ if(nOpen){ nc.textContent=nOpen; nc.classList.remove('hidden'); } else nc.classList.add('hidden'); }
     if(!firstPaint) detectTransitions(data.hosts); else { data.hosts.forEach(h=>PREV_STATUS[h.hostname]=h.status); }
     if(firstPaint || force){ render(); firstPaint=false; }
     else if(VIEW==='overview'){ paintOverviewCounts(); }
     else if(VIEW==='servers'){ paintServers(); }
     else if(VIEW==='topology'){ drawTopology(); }
+    else if(VIEW==='incidents'){ render(); }
   }catch(err){
     if(err&&err.auth){ if(refreshTimer)clearInterval(refreshTimer); refreshTimer=null; showGate(TOKEN?'Session expired':''); }
   }

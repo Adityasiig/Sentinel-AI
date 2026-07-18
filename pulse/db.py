@@ -136,6 +136,67 @@ def audit(actor: str, verb: str, target: str = "", detail: dict | None = None) -
         )
 
 
+# ── incidents / advisories (Phase 2) ─────────────────────────────────────
+def open_incident(host_id: str, kind: str, status: str = "open") -> tuple[int, bool]:
+    """Idempotently open an incident. Returns (incident_id, newly_created).
+
+    One live incident per (host, kind): a failure that persists across sweeps
+    does not spawn a new incident every 60s.
+    """
+    row = conn().execute(
+        "SELECT id FROM incidents WHERE host_id=? AND kind=? AND status!='resolved' "
+        "ORDER BY id DESC LIMIT 1",
+        (host_id, kind),
+    ).fetchone()
+    if row:
+        return row["id"], False
+    with tx() as c:
+        cur = c.execute(
+            "INSERT INTO incidents (host_id, kind, status, opened_ts) VALUES (?,?,?,?)",
+            (host_id, kind, status, time.time()),
+        )
+        return cur.lastrowid, True
+
+
+def record_advisory(incident_id: int, playbook_id: str, cmd: str, destructive: bool) -> None:
+    """Snapshot the proposed remediation at detection time (dry_run, never run)."""
+    with tx() as c:
+        c.execute(
+            "INSERT INTO actions (incident_id, playbook, cmd, destructive, dry_run, result, ts) "
+            "VALUES (?,?,?,?,1,'proposed',?)",
+            (incident_id, playbook_id, cmd, 1 if destructive else 0, time.time()),
+        )
+
+
+def resolve_stale_incidents(host_id: str, active_kinds: set[str]) -> list[str]:
+    """Resolve any open incident for this host whose condition no longer fires."""
+    rows = conn().execute(
+        "SELECT id, kind FROM incidents WHERE host_id=? AND status!='resolved'",
+        (host_id,),
+    ).fetchall()
+    resolved: list[str] = []
+    now = time.time()
+    with tx() as c:
+        for r in rows:
+            if r["kind"] not in active_kinds:
+                c.execute(
+                    "UPDATE incidents SET status='resolved', closed_ts=? WHERE id=?",
+                    (now, r["id"]),
+                )
+                resolved.append(r["kind"])
+    return resolved
+
+
+def open_incidents() -> list[dict]:
+    """All live incidents joined with host info, newest first."""
+    rows = conn().execute(
+        "SELECT i.id, i.host_id, i.kind, i.status, i.opened_ts, h.ip, h.role "
+        "FROM incidents i JOIN hosts h ON h.id = i.host_id "
+        "WHERE i.status != 'resolved' ORDER BY i.opened_ts DESC",
+    ).fetchall()
+    return [_row(r) for r in rows]
+
+
 # ── reads ────────────────────────────────────────────────────────────────
 def _row(r: sqlite3.Row) -> dict[str, Any]:
     return {k: r[k] for k in r.keys()}

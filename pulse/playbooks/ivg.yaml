@@ -1,0 +1,48 @@
+# FreeSWITCH (IVG) playbooks — vetted remediations.
+# Advisor phase surfaces these; nothing here is executed by Pulse.
+---
+id: fs-down
+role: IVG
+severity: critical
+detect:
+  probe: freeswitch
+  status: [crit]
+diagnose: >
+  The FreeSWITCH process is not running. All SIP registrations and call legs
+  on this box are down until it comes back. Restart the service and confirm
+  the core comes up READY.
+  NOTE: if the install itself is missing (no binary/unit) a restart will fail —
+  that is a reinstall, not a restart. Confirm the binary exists first.
+remediate:
+  - name: restart FreeSWITCH
+    destructive: false
+    cmd: "systemctl restart freeswitch 2>/dev/null || /etc/init.d/freeswitch restart"
+verify:
+  probe: freeswitch
+  expect: ok
+rollback: []
+---
+id: fs-profile-wedged
+role: IVG
+severity: warning
+detect:
+  probe: sofia
+  status: [crit]                 # 0 profiles RUNNING
+  unless:                        # if the whole process is down, fs-down owns it
+    probe: freeswitch
+    status: [crit]
+diagnose: >
+  FreeSWITCH is running but no Sofia SIP profiles are in RUNNING state — a
+  wedged/failed profile (often after a gateway or DNS blip). Rescan and restart
+  the internal/external profiles without bouncing the whole switch.
+remediate:
+  - name: rescan and restart Sofia profiles (no full FS restart)
+    destructive: false
+    cmd: |
+      fs_cli -x 'sofia profile external restart'
+      fs_cli -x 'sofia profile internal restart'
+      fs_cli -x 'sofia recover'
+verify:
+  probe: sofia
+  expect: ok
+rollback: []

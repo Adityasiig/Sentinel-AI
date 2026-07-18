@@ -18,6 +18,7 @@ from . import __version__, db, prober
 from .config import settings
 from .inventory import load_hosts
 from .probes import probes_for, roll_up
+from .playbooks import load_playbooks
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(os.path.dirname(HERE), "web")
@@ -56,6 +57,7 @@ async def status():
         "probe_interval": settings.probe_interval,
         "last_sweep": st.get("last_sweep", 0),
         "sweep_ms": st.get("sweep_ms", 0),
+        "incidents": st.get("incidents", 0),
     }
 
 
@@ -107,6 +109,51 @@ async def host_detail(hostname: str):
         for p in probes_for(hosts[hostname]["role"])
     }
     return view
+
+
+@app.get("/api/incidents", dependencies=[Depends(require_token)])
+async def incidents():
+    """Advisor feed (Phase 2, read-only): live incidents + the vetted fix.
+
+    Each known-failure incident carries the exact remediation command an
+    operator should run. `needs-human` incidents are crit probes no playbook
+    covers — surfaced honestly with no auto-fix. Pulse executes none of this.
+    """
+    books = {b.id: b for b in load_playbooks()}
+    out = []
+    for inc in db.open_incidents():
+        kind = inc["kind"]
+        pb = books.get(kind)
+        if pb is not None:
+            advisory = pb.as_dict()
+        else:
+            probe = kind.split(":", 1)[1] if ":" in kind else kind
+            advisory = {
+                "id": kind, "severity": "unknown", "role": inc["role"],
+                "diagnose": (f"Probe '{probe}' is critical and no vetted playbook "
+                             "covers this failure — needs human triage."),
+                "command": "", "destructive": False, "verify": {}, "steps": [],
+            }
+        out.append({
+            "id": inc["id"],
+            "hostname": inc["host_id"],
+            "ip": inc["ip"],
+            "role": inc["role"],
+            "status": inc["status"],          # open | needs-human
+            "kind": kind,
+            "opened_ts": inc["opened_ts"],
+            "advisory": advisory,
+        })
+    # worst first: needs-human, then critical, then warning
+    sev_rank = {"critical": 0, "warning": 1, "info": 2, "unknown": -1}
+    out.sort(key=lambda i: (sev_rank.get(i["advisory"]["severity"], 3), -i["opened_ts"]))
+    return {
+        "count": len(out),
+        "remediation_enabled": settings.remediation_enabled,
+        "phase": "advisor",
+        "incidents": out,
+        "ts": int(time.time()),
+    }
 
 
 # ── dashboard ────────────────────────────────────────────────────────────

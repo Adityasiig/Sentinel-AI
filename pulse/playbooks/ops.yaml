@@ -1,0 +1,69 @@
+# OpenSIPS (OPS) playbooks — vetted remediations.
+# Advisor phase surfaces these; nothing here is executed by Pulse.
+---
+id: ops-rogue-sip-daemon
+role: OPS
+severity: critical
+detect:
+  probe: rogue_sip
+  status: [crit]                 # probe reports "rogue:<daemon>" when one holds :5060
+diagnose: >
+  A conflicting SIP daemon (freeswitch/asterisk/kamailio) is running on this
+  OpenSIPS box and will hold UDP/5060, so OpenSIPS cannot bind on restart.
+  Stop the rogue daemon, then restart OpenSIPS so it reclaims the port.
+remediate:
+  - name: stop the conflicting SIP daemon, then restart OpenSIPS
+    destructive: true
+    cmd: |
+      for d in freeswitch asterisk kamailio; do
+        pgrep -x "$d" >/dev/null && systemctl stop "$d" 2>/dev/null || service "$d" stop 2>/dev/null
+      done
+      sleep 2
+      systemctl restart opensips 2>/dev/null || /etc/init.d/opensips restart
+verify:
+  probe: sip_5060
+  expect: ok
+rollback: []
+---
+id: ops-down
+role: OPS
+severity: critical
+detect:
+  probe: opensips
+  status: [crit]
+  unless:                        # a rogue daemon is the real cause; ops-rogue owns it
+    probe: rogue_sip
+    status: [crit]
+diagnose: >
+  The OpenSIPS process is not running and no conflicting SIP daemon is holding
+  the port. This is a clean crash/stop — restart the service and confirm it
+  rebinds UDP/5060.
+remediate:
+  - name: restart OpenSIPS
+    destructive: false
+    cmd: "systemctl restart opensips 2>/dev/null || /etc/init.d/opensips restart"
+verify:
+  probe: opensips
+  expect: ok
+rollback: []
+---
+id: ops-sip-unbound
+role: OPS
+severity: warning
+detect:
+  probe: sip_5060
+  status: [crit]
+  unless:                        # if the process is down, ops-down owns this
+    probe: opensips
+    status: [crit]
+diagnose: >
+  OpenSIPS is running but UDP/5060 is not bound — the listener failed to come
+  up (config reload race or interface flap). A restart forces a clean rebind.
+remediate:
+  - name: restart OpenSIPS to rebind the SIP listener
+    destructive: false
+    cmd: "systemctl restart opensips 2>/dev/null || /etc/init.d/opensips restart"
+verify:
+  probe: sip_5060
+  expect: ok
+rollback: []

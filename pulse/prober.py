@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from . import db
+from . import db, diagnoser
 from .config import settings
 from .inventory import Host, load_hosts
 from .probes import probes_for
@@ -53,10 +53,19 @@ async def sweep_once() -> dict:
                        for p in probes_for(host.role)]
             db.record_probes(host.hostname, unknown, ts)
 
+    # Phase 2: derive incidents/advisories from the fresh probe state.
+    # Read-only w.r.t. the fleet — this only writes to our own DB.
+    try:
+        adv = diagnoser.evaluate()
+    except Exception as e:  # noqa: BLE001 — advisor must never break the sweep
+        adv = {"error": str(e)}
+        print(f"[diagnoser] error: {e}", flush=True)
+
     ms = int((time.time() - t0) * 1000)
-    _STATE.update(last_sweep=ts, sweep_ms=ms)
-    db.audit("prober", "sweep", detail={"hosts": len(hosts), "reachable": reachable, "ms": ms})
-    return {"hosts": len(hosts), "reachable": reachable, "ms": ms}
+    _STATE.update(last_sweep=ts, sweep_ms=ms, incidents=adv.get("open", 0))
+    db.audit("prober", "sweep",
+             detail={"hosts": len(hosts), "reachable": reachable, "ms": ms, "advisor": adv})
+    return {"hosts": len(hosts), "reachable": reachable, "ms": ms, "advisor": adv}
 
 
 async def run_forever() -> None:

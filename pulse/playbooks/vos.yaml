@@ -1,0 +1,76 @@
+# VOS3000 (VOSS) playbooks — vetted remediations for the known failure chain.
+# Advisor phase surfaces these; nothing here is executed by Pulse.
+---
+id: vos-disk-full
+role: VOSS
+severity: critical
+detect:
+  probe: root_disk
+  status: [crit]                 # root_disk goes crit at >=90%
+diagnose: >
+  Root partition is near full. VOS3000 writes CDRs into MySQL on the root
+  volume; once it hits ENOSPC, mysqld stops accepting writes and port 1355
+  drops. Reclaim space by archiving old CDR tables to the large /home volume.
+remediate:
+  - name: archive e_cdr_* tables older than 60 days to /home, then let MySQL reconnect
+    destructive: true
+    cmd: |
+      mkdir -p /home/mysql_archive/vos3000
+      # move MyISAM CDR partitions older than 60d off root; adjust datadir if custom
+      find /var/lib/mysql/vos3000 -name 'e_cdr_*' -mtime +60 \
+        -exec mv {} /home/mysql_archive/vos3000/ \;
+      /etc/init.d/mysqld restart
+verify:
+  probe: root_disk
+  expect: ok
+rollback:
+  - name: move archived CDRs back to the datadir
+    cmd: "mv /home/mysql_archive/vos3000/e_cdr_* /var/lib/mysql/vos3000/"
+---
+id: vos-mysql-down
+role: VOSS
+severity: critical
+detect:
+  probe: mysql
+  status: [crit]
+  unless:                        # if the disk is full, vos-disk-full owns this
+    probe: root_disk
+    status: [crit]
+diagnose: >
+  mysqld is down while the root disk is healthy — this is a mysqld crash or
+  failed start, NOT the disk-full ENOSPC chain. Web admin may still serve but
+  call routing and CDR writes are dead until MySQL is back. Restart mysqld,
+  then the VOS daemons that depend on it in dependency order.
+remediate:
+  - name: start mysqld then restart dependent VOS daemons in order
+    destructive: false
+    cmd: |
+      /etc/init.d/mysqld start;   sleep 5
+      /etc/init.d/vos3000d restart; sleep 8
+      /etc/init.d/webserverd restart
+verify:
+  probe: mysql
+  expect: ok
+rollback: []
+---
+id: vos-webadmin-down
+role: VOSS
+severity: warning
+detect:
+  probe: webserver
+  status: [crit]
+  unless:                        # mysql-down cascades into webserver; fix DB first
+    probe: mysql
+    status: [crit]
+diagnose: >
+  Tomcat webserverd (web admin) is down but MySQL is healthy. This is usually
+  a wedged Tomcat, not a DB outage — a plain webserverd restart brings the
+  admin UI back.
+remediate:
+  - name: restart webserverd
+    destructive: false
+    cmd: "/etc/init.d/webserverd restart"
+verify:
+  probe: webserver
+  expect: ok
+rollback: []
