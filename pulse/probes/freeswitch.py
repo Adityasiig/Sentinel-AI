@@ -32,9 +32,13 @@ def _profiles(stdout: str, ok: bool) -> tuple[str, str]:
 PROBES = [
     Probe(
         name="freeswitch",
-        command="pgrep -x freeswitch >/dev/null && echo up || echo down",
+        # `pgrep -x freeswitch` (exact comm) false-negatives across the fleet: the
+        # running master's comm isn't literally "freeswitch" (verified — fs_cli
+        # reports READY while -x returns nothing). Match the command line instead;
+        # the [f] bracket keeps pgrep from matching its own argv.
+        command="pgrep -f '[f]reeswitch' >/dev/null && echo up || echo down",
         evaluate=proc_up,
-        description="FreeSWITCH process",
+        description="FreeSWITCH process (cmdline match — comm is not literally 'freeswitch')",
     ),
     Probe(
         name="sofia",
