@@ -31,7 +31,7 @@ class Settings:
 
     # ── probing cadence + safety ─────────────────────────────────────────
     probe_interval: int = _int("PULSE_PROBE_INTERVAL", 60)      # seconds between sweeps
-    ssh_concurrency: int = _int("PULSE_SSH_CONCURRENCY", 10)    # max parallel SSH sessions
+    ssh_concurrency: int = _int("PULSE_SSH_CONCURRENCY", 20)    # max parallel SSH sessions; 20 sweeps the 82-box fleet in ~12s (measured) vs ~22s at 10
     ssh_timeout: int = _int("PULSE_SSH_TIMEOUT", 12)            # per-host connect+run budget
     # Read-only until explicitly flipped. Phase 1 keeps this False, hard.
     remediation_enabled: bool = os.environ.get("PULSE_REMEDIATION_ENABLED", "").lower() in ("1", "true", "yes")
