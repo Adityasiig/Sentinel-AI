@@ -44,6 +44,14 @@ class Settings:
     # playbooks require a manual approval until this is explicitly enabled.
     autoheal_enabled: bool = os.environ.get("PULSE_AUTOHEAL", "").lower() in ("1", "true", "yes")
 
+    # ── AI copilot (Phase 4) ─────────────────────────────────────────────
+    # Local Ollama / OpenAI-compatible endpoint ONLY. Unset => feature off and
+    # the tab degrades gracefully. Fleet data never leaves the box: this is the
+    # base URL of a model running on our own infra, nothing external.
+    llm_url: str = os.environ.get("PULSE_LLM_URL", "").strip()
+    llm_model: str = os.environ.get("PULSE_LLM_MODEL", "llama3.1:8b").strip()
+    llm_timeout: int = _int("PULSE_LLM_TIMEOUT", 180)  # CPU 7B/8B inference is slow
+
     # ── credentials (injected; never committed) ──────────────────────────
     # Per-role SSH users + shared passwords for IVG/OPS, per-box JSON for VOSS.
     creds: dict = field(default_factory=dict)

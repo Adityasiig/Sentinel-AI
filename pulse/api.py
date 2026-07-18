@@ -14,7 +14,7 @@ import time
 from fastapi import Body, Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import __version__, db, governor, prober, remediator
+from . import __version__, aicontext, db, governor, llm, prober, remediator
 from .config import settings
 from .inventory import load_hosts
 from .probes import probes_for, roll_up
@@ -59,6 +59,7 @@ async def status():
         "sweep_ms": st.get("sweep_ms", 0),
         "incidents": st.get("incidents", 0),
         "governor": governor.status(),
+        "ai": {"available": llm.available(), "model": settings.llm_model if llm.available() else None},
     }
 
 
@@ -193,6 +194,51 @@ async def approve(incident_id: int, body: dict = Body(default={})):
 
     result = await remediator.execute(inc, pb, host, approver)
     return {"incident": incident_id, "playbook": pb.id, "host": inc["host_id"], **result}
+
+
+# ── AI copilot (Phase 4, local model only, advisory) ─────────────────────
+@app.post("/api/ask", dependencies=[Depends(require_token)])
+async def ask(body: dict = Body(default={})):
+    """Free-form Q&A over the live fleet snapshot. Local model only, read-only.
+
+    Returns 503 when no local model is configured (PULSE_LLM_URL unset) so the
+    dashboard can degrade the tab gracefully. The model sees only non-secret
+    operational data — never credentials — and can execute nothing.
+    """
+    if not llm.available():
+        raise HTTPException(status_code=503, detail="AI copilot disabled: no local model configured (PULSE_LLM_URL)")
+    question = str(body.get("question") or "").strip()
+    if not question:
+        raise HTTPException(status_code=422, detail="question is required")
+    context = aicontext.fleet_context()
+    try:
+        answer = await asyncio.to_thread(llm.ask, question, context)
+    except llm.LLMUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    db.audit("copilot", "ask", detail={"question": question[:500]})
+    return {"question": question, "answer": answer, "model": settings.llm_model, "ts": int(time.time())}
+
+
+@app.post("/api/incidents/{incident_id}/analyze", dependencies=[Depends(require_token)])
+async def analyze(incident_id: int):
+    """AI triage for a needs-human incident. Advisory text only — never executes.
+
+    Deliberately separate from the governed `/approve` path: this returns words
+    for an operator, and there is no code path from here to the governor.
+    """
+    if not llm.available():
+        raise HTTPException(status_code=503, detail="AI copilot disabled: no local model configured (PULSE_LLM_URL)")
+    inc = db.get_incident(incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail="unknown incident")
+    context = aicontext.incident_context(inc)
+    try:
+        triage = await asyncio.to_thread(llm.analyze_incident, context)
+    except llm.LLMUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    db.audit("copilot", "analyze", target=inc["host_id"], detail={"incident": incident_id})
+    return {"incident": incident_id, "host": inc["host_id"], "triage": triage,
+            "model": settings.llm_model, "ts": int(time.time())}
 
 
 # ── dashboard ────────────────────────────────────────────────────────────

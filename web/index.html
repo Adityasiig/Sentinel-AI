@@ -314,6 +314,22 @@ button{font-family:inherit}
 .fix-verify{padding:8px 15px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
 .inc-nofix{margin-top:13px;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--unknown);background:rgba(100,116,139,.07);border:1px dashed rgba(100,116,139,.3);border-radius:11px;padding:11px 14px}
 .navcount{font-size:9px;font-weight:800;color:var(--crit);background:rgba(244,63,94,.14);border:1px solid rgba(244,63,94,.28);padding:2px 6px;border-radius:6px}
+/* ── AI Copilot ── */
+.ai-card{padding:20px}
+.ai-model{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+.ai-input{display:flex;gap:10px;align-items:flex-end}
+.ai-input textarea{flex:1;resize:vertical;min-height:64px;background:rgba(148,163,184,.06);border:1px solid var(--line);border-radius:12px;padding:12px 14px;color:var(--text);font-family:inherit;font-size:13.5px;line-height:1.5;transition:.18s var(--ease)}
+.ai-input textarea:focus{outline:none;border-color:rgba(79,124,255,.5);background:rgba(79,124,255,.05)}
+.ai-presets{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.ai-answer{margin-top:16px;border:1px solid rgba(79,124,255,.18);border-radius:14px;background:linear-gradient(180deg,rgba(79,124,255,.05),rgba(79,124,255,.01));padding:15px 17px;animation:fadeUp .3s var(--ease)}
+.ai-triage{margin-top:12px;border:1px solid rgba(79,124,255,.18);border-radius:12px;background:rgba(79,124,255,.04);padding:13px 15px;animation:fadeUp .3s var(--ease)}
+.ai-head{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--accent,#6f9bff);margin-bottom:9px}
+.ai-head .ai-model{margin-left:auto}
+.ai-qline{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+.ai-body{font-size:13.5px;line-height:1.65;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.ai-foot{margin-top:11px;padding-top:9px;border-top:1px solid var(--line);display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+.ai-wait{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
@@ -364,7 +380,7 @@ button{font-family:inherit}
       <div class="nav-item" data-view="calls" onclick="go('calls')"><i data-lucide="phone-call"></i><span class="txt">Calls</span><span class="soon">SOON</span></div>
       <div class="nav-item" data-view="routes" onclick="go('routes')"><i data-lucide="route"></i><span class="txt">Routes</span><span class="soon">SOON</span></div>
       <div class="side-label">Intelligence</div>
-      <div class="nav-item" data-view="ai" onclick="go('ai')"><i data-lucide="sparkles"></i><span class="txt">AI Copilot</span><span class="soon">SOON</span></div>
+      <div class="nav-item" data-view="ai" onclick="go('ai')"><i data-lucide="sparkles"></i><span class="txt">AI Copilot</span></div>
       <div class="side-foot">
         <div class="collapse-btn" onclick="toggleSide()"><i data-lucide="chevrons-left"></i><span class="txt">Collapse</span></div>
       </div>
@@ -492,6 +508,7 @@ function render(){
   else if(VIEW==='servers')  m.innerHTML=renderServers();
   else if(VIEW==='topology') { m.innerHTML=renderTopologyShell(); drawTopology(); }
   else if(VIEW==='incidents')m.innerHTML=renderIncidents();
+  else if(VIEW==='ai')       m.innerHTML=renderCopilot();
   else                       m.innerHTML=renderEmpty(VIEW);
   icon();
   if(VIEW==='overview' && FLEET) paintOverviewCounts();
@@ -770,11 +787,72 @@ function renderIncidents(){
       if(a.verify&&a.verify.probe) h+='<div class="fix-verify"><i data-lucide="check-check" style="width:12px;height:12px"></i>Verify: probe <b style="color:var(--text)">&nbsp;'+esc(a.verify.probe)+'</b>&nbsp; expected <b style="color:var(--ok)">'+esc(a.verify.expect)+'</b></div>';
       h+='</div>';
     } else {
-      h+='<div class="inc-nofix"><i data-lucide="user-cog" style="width:15px;height:15px"></i>No vetted fix — this failure needs human triage before any action.</div>';
+      const aiOn=STATUS&&STATUS.ai&&STATUS.ai.available;
+      h+='<div class="inc-nofix"><i data-lucide="user-cog" style="width:15px;height:15px"></i>No vetted fix — this failure needs human triage before any action.'
+        +(aiOn?'<button class="btn sm" style="margin-left:auto" onclick="analyzeIncident('+inc.id+',this)"><i data-lucide="sparkles"></i>Ask AI</button>':'')
+        +'</div>';
+      h+='<div class="ai-triage hidden" id="ai-tri-'+inc.id+'"></div>';
     }
     h+='</div>';
   }
   return h+'</div>';
+}
+/* ══════════════════════════ AI COPILOT (Phase 4) ══════════════════════════ */
+async function analyzeIncident(id,btn){
+  const box=document.getElementById('ai-tri-'+id); if(!box) return;
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin" style="width:13px;height:13px"></span>Thinking…'; }
+  box.classList.remove('hidden');
+  box.innerHTML='<div class="ai-head"><i data-lucide="sparkles" style="width:13px;height:13px"></i>Copilot triage</div>'
+    +'<div class="ai-wait"><span class="spin" style="width:14px;height:14px"></span>Local model reasoning — CPU inference can take 1–2 min…</div>'; icon();
+  try{
+    const r=await apiPost('/api/incidents/'+id+'/analyze',{});
+    box.innerHTML='<div class="ai-head"><i data-lucide="sparkles" style="width:13px;height:13px"></i>Copilot triage'
+      +'<span class="ai-model">'+esc(r.model||'')+'</span></div><div class="ai-body">'+esc(r.triage||'')+'</div>'
+      +'<div class="ai-foot"><i data-lucide="shield" style="width:11px;height:11px"></i>Advisory only — review before acting. Pulse will not run this.</div>';
+  }catch(err){
+    if(err&&err.auth){ showGate('Session expired'); return; }
+    box.innerHTML='<div class="ai-head" style="color:var(--crit)"><i data-lucide="alert-triangle" style="width:13px;height:13px"></i>'+esc(String(err.message||err))+'</div>';
+  }
+  icon();
+  if(btn){ btn.disabled=false; btn.innerHTML='<i data-lucide="sparkles"></i>Re-ask AI'; icon(); }
+}
+async function askAI(btn){
+  const ta=document.getElementById('ai-q'); if(!ta) return;
+  const q=ta.value.trim(); if(!q){ ta.focus(); return; }
+  const out=document.getElementById('ai-answer');
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin" style="width:14px;height:14px"></span>Thinking…'; icon(); }
+  out.classList.remove('hidden');
+  out.innerHTML='<div class="ai-wait"><span class="spin" style="width:14px;height:14px"></span>Local model reasoning — CPU inference can take 1–2 min…</div>';
+  try{
+    const r=await apiPost('/api/ask',{question:q});
+    out.innerHTML='<div class="ai-qline"><i data-lucide="corner-down-right" style="width:13px;height:13px"></i>'+esc(q)+'</div>'
+      +'<div class="ai-body">'+esc(r.answer||'')+'</div>'
+      +'<div class="ai-foot"><i data-lucide="shield" style="width:11px;height:11px"></i>Grounded on the live fleet snapshot · '+esc(r.model||'')+' · no data leaves the box.</div>';
+  }catch(err){
+    if(err&&err.auth){ showGate('Session expired'); return; }
+    out.innerHTML='<div class="ai-head" style="color:var(--crit)"><i data-lucide="alert-triangle" style="width:13px;height:13px"></i>'+esc(String(err.message||err))+'</div>';
+  }
+  icon();
+  if(btn){ btn.disabled=false; btn.innerHTML='<i data-lucide="send"></i>Ask'; icon(); }
+}
+function askPreset(q){ const ta=document.getElementById('ai-q'); if(ta){ ta.value=q; askAI(document.getElementById('ai-send')); } }
+function renderCopilot(){
+  const on=STATUS&&STATUS.ai&&STATUS.ai.available;
+  let h='<div class="view"><div class="page-head"><div><h1>AI Copilot</h1>'
+    +'<p>Ask the fleet a question — grounded on live health data, answered by a local model · no data leaves the box</p></div></div>';
+  if(!on){
+    h+='<div class="card"><div class="empty"><div class="ill"><i data-lucide="sparkles"></i></div>'
+      +'<h3>Local model not connected</h3><p>The copilot runs entirely on our own infrastructure — set <code>PULSE_LLM_URL</code> to a local Ollama endpoint (e.g. <code>http://host:11434</code>) and the tab lights up. Until then, fleet data never gets sent anywhere.</p>'
+      +'<div class="phase"><i data-lucide="shield-check" style="width:13px;height:13px"></i>Local-only · advisory · read-only</div></div></div></div>';
+    return h;
+  }
+  const presets=['Which hosts are unhealthy right now and why?','Summarise the health of the VOSS fleet.','What is the single most urgent problem to fix first?','Are there any hosts I should investigate for a rogue SIP daemon?'];
+  h+='<div class="card ai-card"><div class="ai-model" style="margin-bottom:10px"><i data-lucide="cpu" style="width:12px;height:12px"></i>'+esc(STATUS.ai.model||'local model')+' · running on-box</div>'
+    +'<div class="ai-input"><textarea id="ai-q" rows="3" placeholder="e.g. Which OpenSIPS boxes are degraded and what should I check first?" onkeydown="if((event.metaKey||event.ctrlKey)&&event.key===\'Enter\'){askAI(document.getElementById(\'ai-send\'));}"></textarea>'
+    +'<button class="btn primary" id="ai-send" onclick="askAI(this)"><i data-lucide="send"></i>Ask</button></div>'
+    +'<div class="ai-presets">'+presets.map(p=>'<button class="chip" onclick="askPreset(this.dataset.q)" data-q="'+esc(p)+'">'+esc(p)+'</button>').join('')+'</div>'
+    +'<div class="ai-answer hidden" id="ai-answer"></div></div></div>';
+  return h;
 }
 /* ══════════════════════════ DRAWER ══════════════════════════ */
 async function openHost(name){
