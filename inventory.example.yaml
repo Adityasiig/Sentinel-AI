@@ -1,0 +1,27 @@
+# Pulse fleet inventory — NON-SECRET only.
+# Copy to inventory.yaml (gitignored) and fill with your real hosts, OR provide
+# the same structure via the INVENTORY_PATH env var at deploy time.
+#
+# Credentials are NEVER stored here — they are injected at runtime (see
+# credentials.example.yaml and the *_SSH_PASSWORD / VOSS_CREDS_JSON env vars).
+#
+# role: one of  IVG (FreeSWITCH) | OPS (OpenSIPS) | VOSS (VOS3000)
+
+defaults:
+  ssh_port: 22
+
+hosts:
+  - hostname: ivg-fs-01
+    ip: 74.81.33.11
+    role: IVG
+
+  - hostname: ops-sip-01
+    ip: 74.81.44.82
+    role: OPS
+
+  - hostname: voss-sw-01
+    ip: 198.23.213.202
+    role: VOSS
+    meta:
+      web_admin_port: 3809     # per-box, VOS3000 tomcat port
+      gui_port: 1355

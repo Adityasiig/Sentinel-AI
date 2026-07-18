@@ -1,0 +1,27 @@
+# ── Secrets — NEVER commit fleet credentials ─────────────────────────────
+credentials.yaml
+inventory.yaml
+.env
+*.pem
+*.key
+id_rsa*
+
+# ── Runtime state ────────────────────────────────────────────────────────
+*.sqlite
+*.sqlite-*
+*.db
+/data/
+
+# ── Python ───────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ── Editor / OS ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store

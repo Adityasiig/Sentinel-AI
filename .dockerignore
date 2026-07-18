@@ -1,0 +1,17 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+.venv
+venv
+*.sqlite
+*.sqlite-*
+*.db
+data
+credentials.yaml
+inventory.yaml
+.env
+DESIGN.md
+README.md
+.pytest_cache
+.mypy_cache
