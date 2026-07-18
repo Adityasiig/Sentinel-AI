@@ -2,322 +2,844 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pulse · Fleet Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<title>Pulse — Fleet Operations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.1/dist/apexcharts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.454.0/dist/umd/lucide.min.js"></script>
 <style>
-  :root{
-    --bg:#070b14; --bg2:#0b1120; --panel:rgba(20,27,45,.72); --panel-solid:#141b2d;
-    --line:rgba(255,255,255,.07); --txt:#e6ecfb; --muted:#8291b0; --dim:#5b6885;
-    --ok:#28d17c; --warn:#f5b942; --crit:#ff5470; --unknown:#5b6885;
-    --accent:#5b8cff; --accent2:#9b6bff; --glow:0 0 24px;
-    --radius:16px; --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
-    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;height:100%}
-  body{
-    background:var(--bg); color:var(--txt); font-family:var(--font);
-    font-size:14px; line-height:1.5; overflow-x:hidden; position:relative;
-  }
-  /* animated aurora backdrop */
-  body::before{
-    content:""; position:fixed; inset:-30%; z-index:-2;
-    background:
-      radial-gradient(40% 40% at 20% 20%, rgba(91,140,255,.16), transparent 60%),
-      radial-gradient(45% 45% at 80% 15%, rgba(155,107,255,.14), transparent 60%),
-      radial-gradient(50% 50% at 60% 90%, rgba(40,209,124,.10), transparent 60%);
-    filter:blur(30px); animation:drift 22s ease-in-out infinite alternate;
-  }
-  body::after{
-    content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
-    background:linear-gradient(180deg,rgba(7,11,20,.2),rgba(7,11,20,.85));
-  }
-  @keyframes drift{
-    0%{transform:translate3d(0,0,0) scale(1)}
-    100%{transform:translate3d(-4%,3%,0) scale(1.08)}
-  }
+/* ══════════════════════════ DESIGN TOKENS ══════════════════════════ */
+:root{
+  --bg:#070B14; --bg-2:#0B1220; --card:#111827; --card-hover:#172033;
+  --accent:#4F7CFF; --accent-2:#38BDF8;
+  --ok:#22C55E; --warn:#FACC15; --crit:#F43F5E; --info:#38BDF8; --unknown:#64748B;
+  --muted:#94A3B8; --text:#F8FAFC; --line:rgba(148,163,184,.10); --line-2:rgba(148,163,184,.18);
+  --glass:rgba(17,24,39,.62); --glass-2:rgba(11,18,32,.72);
+  --shadow:0 10px 40px -12px rgba(0,0,0,.7); --shadow-lg:0 24px 70px -20px rgba(0,0,0,.8);
+  --glow-accent:0 0 0 1px rgba(79,124,255,.25), 0 12px 48px -12px rgba(79,124,255,.35);
+  --r-sm:10px; --r:14px; --r-lg:18px; --r-xl:22px;
+  --s1:8px; --s2:16px; --s3:24px; --s4:32px; --s5:40px;
+  --nav-h:60px; --side-w:236px; --side-w-collapsed:72px;
+  --ease:cubic-bezier(.22,.61,.36,1); --spring:cubic-bezier(.34,1.56,.64,1);
+  --ff:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  font-family:var(--ff); background:var(--bg); color:var(--text);
+  font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; overflow:hidden;
+  letter-spacing:-.006em;
+}
+button{font-family:inherit}
+::selection{background:rgba(79,124,255,.35)}
 
-  /* header */
-  header{
-    display:flex; align-items:center; gap:16px; padding:20px 30px;
-    border-bottom:1px solid var(--line); backdrop-filter:blur(12px);
-    position:sticky; top:0; z-index:10; background:rgba(7,11,20,.55);
-  }
-  .logo{display:flex; align-items:center; gap:12px; font-weight:700; font-size:19px; letter-spacing:.4px}
-  .beat{width:12px;height:12px;border-radius:50%;background:var(--ok);
-        box-shadow:var(--glow) var(--ok); animation:beat 1.6s ease-in-out infinite}
-  @keyframes beat{0%,100%{transform:scale(.75);opacity:.6}50%{transform:scale(1.25);opacity:1}}
-  .logo span{background:linear-gradient(90deg,var(--accent),var(--accent2));
-             -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent}
-  .fleet-pill{margin-left:6px;padding:5px 14px;border-radius:999px;font-size:12px;font-weight:700;
-              letter-spacing:.5px;text-transform:uppercase;border:1px solid var(--line)}
-  .spacer{flex:1}
-  .meta{display:flex;gap:22px;align-items:center;color:var(--muted);font-size:12.5px}
-  .meta b{color:var(--txt);font-variant-numeric:tabular-nums}
-  .live{display:flex;align-items:center;gap:7px}
-  .live i{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:var(--glow) var(--ok);
-          animation:beat 1.6s ease-in-out infinite}
+/* ── ambient background ── */
+.bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none}
+.bg-grid{background-image:linear-gradient(rgba(148,163,184,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(148,163,184,.035) 1px,transparent 1px);background-size:44px 44px;mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 40%,transparent 100%)}
+.bg-glow-a{position:fixed;top:-260px;left:8%;width:620px;height:620px;border-radius:50%;background:radial-gradient(circle,rgba(79,124,255,.20),transparent 66%);filter:blur(30px);z-index:0;pointer-events:none;animation:float 22s var(--ease) infinite alternate}
+.bg-glow-b{position:fixed;bottom:-300px;right:4%;width:680px;height:680px;border-radius:50%;background:radial-gradient(circle,rgba(56,189,248,.14),transparent 66%);filter:blur(34px);z-index:0;pointer-events:none;animation:float 26s var(--ease) infinite alternate-reverse}
+.bg-noise{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.028;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+@keyframes float{to{transform:translate3d(40px,50px,0) scale(1.08)}}
 
-  main{max-width:1320px;margin:0 auto;padding:28px 30px 80px}
+/* ── scrollbars ── */
+*{scrollbar-width:thin;scrollbar-color:transparent transparent}
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-thumb{background:transparent;border-radius:8px;border:2px solid transparent;background-clip:content-box}
+*:hover::-webkit-scrollbar-thumb{background:rgba(148,163,184,.28);background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.5);background-clip:content-box}
 
-  /* KPI row */
-  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:26px}
-  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-       padding:18px 20px;position:relative;overflow:hidden;backdrop-filter:blur(10px);
-       transition:transform .25s ease,border-color .25s ease}
-  .kpi:hover{transform:translateY(-3px);border-color:rgba(255,255,255,.16)}
-  .kpi .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.6px}
-  .kpi .num{font-size:34px;font-weight:800;margin-top:8px;font-variant-numeric:tabular-nums;
-            line-height:1}
-  .kpi .bar{position:absolute;left:0;bottom:0;height:3px;width:100%;opacity:.9}
-  .kpi.ok .num{color:var(--ok)} .kpi.ok .bar{background:var(--ok)}
-  .kpi.warn .num{color:var(--warn)} .kpi.warn .bar{background:var(--warn)}
-  .kpi.crit .num{color:var(--crit)} .kpi.crit .bar{background:var(--crit)}
-  .kpi.unknown .num{color:var(--unknown)} .kpi.unknown .bar{background:var(--unknown)}
-  .kpi.total .num{color:var(--txt)} .kpi.total .bar{background:linear-gradient(90deg,var(--accent),var(--accent2))}
+/* ══════════════════════════ APP SHELL ══════════════════════════ */
+#app{position:relative;z-index:2;height:100%;display:flex;flex-direction:column}
+.hidden{display:none!important}
 
-  /* role columns */
-  .roles{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-  .role{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-        padding:0;backdrop-filter:blur(10px);overflow:hidden}
-  .role h2{display:flex;align-items:center;gap:10px;margin:0;padding:16px 20px;
-           font-size:15px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
-  .role h2 .tag{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.5px}
-  .role h2 .cnt{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
-  .role .body{padding:12px;display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto}
+/* ── top nav ── */
+.nav{height:var(--nav-h);flex:0 0 auto;display:flex;align-items:center;gap:var(--s2);padding:0 var(--s3);
+  background:var(--glass-2);backdrop-filter:blur(20px) saturate(140%);border-bottom:1px solid var(--line);position:relative;z-index:20}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px;letter-spacing:-.02em}
+.brand .logo{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:var(--glow-accent);position:relative;overflow:hidden}
+.brand .logo svg{width:17px;height:17px;color:#fff;position:relative;z-index:1}
+.brand .logo::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 30% 20%,rgba(255,255,255,.4),transparent 60%)}
+.nav-sep{width:1px;height:24px;background:var(--line-2);margin:0 4px}
+.chip{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;border-radius:9px;background:rgba(148,163,184,.07);border:1px solid var(--line);color:var(--muted);font-size:12.5px;font-weight:500;cursor:pointer;transition:.18s var(--ease);white-space:nowrap}
+.chip:hover{background:rgba(148,163,184,.13);color:var(--text)}
+.chip.env{color:var(--accent-2);border-color:rgba(56,189,248,.25);background:rgba(56,189,248,.06)}
+.chip .dot{width:7px;height:7px;border-radius:50%}
+.nav-search{flex:1;max-width:420px;display:flex;align-items:center;gap:9px;height:34px;padding:0 12px;border-radius:11px;background:rgba(11,18,32,.6);border:1px solid var(--line);color:var(--muted);cursor:text;transition:.18s var(--ease)}
+.nav-search:hover{border-color:var(--line-2);background:rgba(11,18,32,.85)}
+.nav-search svg{width:15px;height:15px}
+.nav-search .kbd{margin-left:auto;display:flex;gap:3px}
+.kbd b{font:600 10.5px var(--ff);background:rgba(148,163,184,.14);border:1px solid var(--line-2);border-radius:5px;padding:2px 6px;color:var(--muted)}
+.nav-spacer{flex:1}
+.icon-btn{width:34px;height:34px;border:1px solid var(--line);background:rgba(148,163,184,.05);border-radius:10px;color:var(--muted);display:grid;place-items:center;cursor:pointer;transition:.18s var(--ease);position:relative}
+.icon-btn:hover{color:var(--text);background:rgba(148,163,184,.12);transform:translateY(-1px)}
+.icon-btn svg{width:16px;height:16px}
+.icon-btn .badge{position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--crit);color:#fff;font:700 9px var(--ff);display:grid;place-items:center;box-shadow:0 0 0 2px var(--bg-2)}
+.live-pill{display:flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:9px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.22);color:var(--ok);font-size:12px;font-weight:600}
+.live-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:pulse-ok 2s infinite}
+.clock{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px;font-weight:500;min-width:74px;text-align:right}
+.avatar{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#4F7CFF,#8B5CF6);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;cursor:pointer;border:1px solid rgba(255,255,255,.14);transition:.18s}
+.avatar:hover{transform:translateY(-1px)}
 
-  /* host row */
-  .host{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:11px;
-        background:rgba(255,255,255,.025);border:1px solid transparent;cursor:pointer;
-        transition:background .18s ease,border-color .18s ease,transform .18s ease}
-  .host:hover{background:rgba(255,255,255,.055);border-color:var(--line);transform:translateX(2px)}
-  .dot{width:11px;height:11px;border-radius:50%;flex:none}
-  .dot.ok{background:var(--ok);box-shadow:var(--glow) var(--ok)}
-  .dot.warn{background:var(--warn);box-shadow:var(--glow) var(--warn)}
-  .dot.crit{background:var(--crit);box-shadow:var(--glow) var(--crit);animation:beat 1.1s ease-in-out infinite}
-  .dot.unknown{background:var(--unknown);opacity:.6}
-  .host .name{font-weight:600}
-  .host .ip{color:var(--dim);font-family:var(--mono);font-size:12px;margin-left:2px}
-  .host .chips{margin-left:auto;display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
-  .chip{font-size:10.5px;padding:2px 7px;border-radius:6px;font-family:var(--mono);
-        border:1px solid var(--line);color:var(--muted);white-space:nowrap}
-  .chip.ok{color:var(--ok);border-color:rgba(40,209,124,.3)}
-  .chip.warn{color:var(--warn);border-color:rgba(245,185,66,.3)}
-  .chip.crit{color:var(--crit);border-color:rgba(255,84,112,.35)}
-  .chip.unknown{color:var(--unknown)}
+/* ── body split ── */
+.body{flex:1;display:flex;min-height:0}
 
-  /* skeleton */
-  .skel{height:56px;border-radius:11px;background:linear-gradient(100deg,
-        rgba(255,255,255,.03) 30%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.03) 70%);
-        background-size:200% 100%;animation:shimmer 1.3s infinite}
-  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* ── sidebar ── */
+.side{width:var(--side-w);flex:0 0 auto;padding:var(--s2) 12px;display:flex;flex-direction:column;gap:3px;border-right:1px solid var(--line);background:linear-gradient(180deg,rgba(11,18,32,.5),rgba(7,11,20,.3));transition:width .28s var(--ease);overflow:hidden}
+.side.collapsed{width:var(--side-w-collapsed)}
+.side-label{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--unknown);padding:12px 12px 6px;white-space:nowrap;transition:.2s}
+.side.collapsed .side-label{opacity:0;height:0;padding:0}
+.nav-item{display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:11px;color:var(--muted);cursor:pointer;font-weight:500;font-size:13.5px;transition:.16s var(--ease);position:relative;white-space:nowrap;border:1px solid transparent}
+.nav-item svg{width:18px;height:18px;flex:0 0 18px}
+.nav-item:hover{background:var(--card-hover);color:var(--text)}
+.nav-item.active{background:linear-gradient(90deg,rgba(79,124,255,.16),rgba(79,124,255,.04));color:var(--text);border-color:rgba(79,124,255,.22)}
+.nav-item.active::before{content:"";position:absolute;left:-12px;top:50%;transform:translateY(-50%);width:3px;height:20px;border-radius:0 3px 3px 0;background:linear-gradient(var(--accent),var(--accent-2))}
+.nav-item .txt{flex:1;transition:.2s}
+.side.collapsed .nav-item .txt,.side.collapsed .soon{opacity:0;width:0}
+.soon{font-size:9px;font-weight:700;letter-spacing:.05em;color:var(--accent-2);background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.2);padding:2px 6px;border-radius:6px}
+.side-foot{margin-top:auto;padding-top:12px}
+.collapse-btn{display:flex;align-items:center;gap:12px;height:38px;padding:0 12px;border-radius:11px;color:var(--unknown);cursor:pointer;font-size:12.5px;font-weight:500;transition:.16s}
+.collapse-btn:hover{background:var(--card-hover);color:var(--text)}
+.collapse-btn svg{width:17px;height:17px;transition:transform .3s var(--ease)}
+.side.collapsed .collapse-btn svg{transform:rotate(180deg)}
 
-  /* token gate */
-  .gate{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
-        background:rgba(7,11,20,.86);backdrop-filter:blur(8px)}
-  .gate.show{display:flex}
-  .gate .box{background:var(--panel-solid);border:1px solid var(--line);border-radius:var(--radius);
-             padding:30px;width:360px;text-align:center}
-  .gate h3{margin:0 0 6px} .gate p{color:var(--muted);margin:0 0 18px;font-size:13px}
-  .gate input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);
-              background:#0a0f1c;color:var(--txt);font-size:15px;font-family:var(--mono)}
-  .gate button{margin-top:14px;width:100%;padding:12px;border:0;border-radius:10px;cursor:pointer;
-               font-weight:700;font-size:15px;color:#08101f;
-               background:linear-gradient(90deg,var(--accent),var(--accent2))}
-  .gate .err{color:var(--crit);font-size:12.5px;margin-top:10px;min-height:16px}
+/* ── main ── */
+.main{flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;padding:var(--s3) var(--s4)}
+.view{animation:viewIn .4s var(--ease)}
+@keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--s2);margin-bottom:var(--s3);flex-wrap:wrap}
+.page-head h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.03em}
+.page-head p{margin:4px 0 0;color:var(--muted);font-size:13.5px}
 
-  /* drawer */
-  .drawer{position:fixed;top:0;right:0;height:100%;width:min(460px,92vw);z-index:40;
-          background:var(--panel-solid);border-left:1px solid var(--line);
-          transform:translateX(100%);transition:transform .3s cubic-bezier(.2,.8,.2,1);
-          overflow:auto;box-shadow:-30px 0 60px rgba(0,0,0,.4)}
-  .drawer.open{transform:translateX(0)}
-  .drawer .dh{display:flex;align-items:center;gap:12px;padding:20px 24px;border-bottom:1px solid var(--line)}
-  .drawer .dh .x{margin-left:auto;cursor:pointer;color:var(--muted);font-size:22px;line-height:1}
-  .drawer .db{padding:18px 24px}
-  .prow{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
-  .prow .pn{font-weight:600} .prow .pd{color:var(--dim);font-size:12px}
-  .prow .pv{margin-left:auto;font-family:var(--mono);font-size:13px}
-  .badge{padding:3px 9px;border-radius:7px;font-size:11px;font-weight:700;text-transform:uppercase}
-  .badge.ok{background:rgba(40,209,124,.16);color:var(--ok)}
-  .badge.warn{background:rgba(245,185,66,.16);color:var(--warn)}
-  .badge.crit{background:rgba(255,84,112,.16);color:var(--crit)}
-  .badge.unknown{background:rgba(91,104,133,.18);color:var(--unknown)}
+/* ── status banner ── */
+.banner{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s3);border-radius:var(--r-lg);margin-bottom:var(--s3);border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(12px);position:relative;overflow:hidden}
+.banner::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
+.banner.healthy::before{background:var(--ok)} .banner.warning::before{background:var(--warn)}
+.banner.critical::before{background:var(--crit)} .banner.degraded::before{background:var(--unknown)}
+.banner .b-ico{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;flex:0 0 44px}
+.banner.healthy .b-ico{background:rgba(34,197,94,.12);color:var(--ok)} .banner.warning .b-ico{background:rgba(250,204,21,.12);color:var(--warn)}
+.banner.critical .b-ico{background:rgba(244,63,94,.12);color:var(--crit)} .banner.degraded .b-ico{background:rgba(100,116,139,.14);color:var(--unknown)}
+.banner .b-ico svg{width:22px;height:22px}
+.banner h3{margin:0;font-size:15px;font-weight:700}
+.banner p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+.banner .b-meta{margin-left:auto;text-align:right;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 
-  .phase{margin-top:30px;text-align:center;color:var(--dim);font-size:12px}
-  .phase b{color:var(--muted)}
-  @media(max-width:980px){.kpis{grid-template-columns:repeat(2,1fr)}.roles{grid-template-columns:1fr}}
+/* ── cards / grids ── */
+.grid{display:grid;gap:var(--s2)}
+.stats{grid-template-columns:repeat(5,1fr)}
+.roles{grid-template-columns:repeat(3,1fr);margin-top:var(--s2)}
+.servers{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+@media(max-width:1180px){.stats{grid-template-columns:repeat(3,1fr)}.roles{grid-template-columns:1fr}}
+@media(max-width:820px){.stats{grid-template-columns:repeat(2,1fr)}.main{padding:var(--s2)}}
+
+.card{background:var(--glass);backdrop-filter:blur(14px) saturate(130%);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--s3);position:relative;transition:transform .25s var(--ease),box-shadow .25s var(--ease),border-color .25s var(--ease)}
+.card.hoverable{cursor:pointer}
+.card.hoverable:hover{transform:translateY(-6px) scale(1.01);border-color:var(--line-2);box-shadow:var(--shadow-lg)}
+.card.hoverable:hover::after{opacity:1}
+.card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:.25s;background:radial-gradient(400px circle at var(--mx,50%) var(--my,0%),rgba(79,124,255,.10),transparent 60%)}
+
+/* stat card */
+.stat .s-top{display:flex;align-items:center;justify-content:space-between}
+.stat .s-ico{width:38px;height:38px;border-radius:11px;display:grid;place-items:center}
+.stat .s-ico svg{width:19px;height:19px}
+.stat .s-num{font-size:34px;font-weight:800;letter-spacing:-.03em;margin:14px 0 2px;font-variant-numeric:tabular-nums;line-height:1}
+.stat .s-lbl{color:var(--muted);font-size:12.5px;font-weight:500}
+.stat .s-trend{position:absolute;top:var(--s3);right:var(--s3);font-size:11px;color:var(--unknown)}
+.tone-total .s-ico{background:rgba(79,124,255,.12);color:var(--accent)}
+.tone-ok .s-ico{background:rgba(34,197,94,.12);color:var(--ok)} .tone-ok .s-num{color:var(--ok)}
+.tone-warn .s-ico{background:rgba(250,204,21,.12);color:var(--warn)} .tone-warn .s-num{color:var(--warn)}
+.tone-crit .s-ico{background:rgba(244,63,94,.12);color:var(--crit)} .tone-crit .s-num{color:var(--crit)}
+.tone-unknown .s-ico{background:rgba(100,116,139,.14);color:var(--unknown)} .tone-unknown .s-num{color:var(--unknown)}
+
+/* role card */
+.role-h{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.role-badge{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-weight:800;font-size:13px;letter-spacing:.02em}
+.role-IVG{background:rgba(139,92,246,.14);color:#a78bfa} .role-OPS{background:rgba(56,189,248,.14);color:var(--accent-2)} .role-VOSS{background:rgba(244,114,182,.14);color:#f472b6}
+.role-h .r-name{font-weight:700;font-size:14.5px} .role-h .r-sub{color:var(--muted);font-size:12px}
+.role-h .r-count{margin-left:auto;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.stackbar{height:9px;border-radius:6px;overflow:hidden;display:flex;background:rgba(148,163,184,.08);margin-bottom:12px}
+.stackbar i{height:100%;transition:width .6s var(--ease)}
+.sb-ok{background:var(--ok)} .sb-warn{background:var(--warn)} .sb-crit{background:var(--crit)} .sb-unknown{background:var(--unknown)}
+.role-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.role-legend span{display:flex;align-items:center;gap:6px}
+.role-legend b{width:8px;height:8px;border-radius:3px}
+
+/* ── server card ── */
+.srv{padding:var(--s2) var(--s3) var(--s3)}
+.srv-top{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.srv-ring{position:relative;width:52px;height:52px;flex:0 0 52px}
+.srv-ring svg{transform:rotate(-90deg)}
+.srv-ring .score{position:absolute;inset:0;display:grid;place-items:center;font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
+.srv-id{min-width:0;flex:1}
+.srv-id .h{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px}
+.srv-id .ip{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;margin-top:2px}
+.role-tag{font-size:9.5px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:6px;flex:0 0 auto}
+.tag-IVG{background:rgba(139,92,246,.14);color:#a78bfa}.tag-OPS{background:rgba(56,189,248,.14);color:var(--accent-2)}.tag-VOSS{background:rgba(244,114,182,.14);color:#f472b6}
+.srv-probes{display:flex;flex-direction:column;gap:7px}
+.pchip{display:flex;align-items:center;gap:9px;font-size:12px;padding:7px 10px;border-radius:9px;background:rgba(148,163,184,.05);border:1px solid var(--line)}
+.pchip .pn{color:var(--muted);flex:1;text-transform:capitalize}
+.pchip .pv{font-weight:600;font-variant-numeric:tabular-nums}
+.pdot{width:7px;height:7px;border-radius:50%;flex:0 0 7px}
+.d-ok{background:var(--ok);box-shadow:0 0 0 0 rgba(34,197,94,.5);animation:pulse-ok 2.4s infinite}
+.d-warn{background:var(--warn);box-shadow:0 0 0 0 rgba(250,204,21,.5);animation:pulse-warn 2.4s infinite}
+.d-crit{background:var(--crit);box-shadow:0 0 0 0 rgba(244,63,94,.55);animation:pulse-crit 1.8s infinite}
+.d-unknown{background:var(--unknown)}
+@keyframes pulse-ok{70%{box-shadow:0 0 0 6px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+@keyframes pulse-warn{70%{box-shadow:0 0 0 6px rgba(250,204,21,0)}100%{box-shadow:0 0 0 0 rgba(250,204,21,0)}}
+@keyframes pulse-crit{70%{box-shadow:0 0 0 7px rgba(244,63,94,0)}100%{box-shadow:0 0 0 0 rgba(244,63,94,0)}}
+
+/* ── filter bar ── */
+.filterbar{display:flex;gap:10px;align-items:center;margin-bottom:var(--s3);flex-wrap:wrap}
+.seg{display:flex;gap:3px;padding:3px;background:rgba(11,18,32,.6);border:1px solid var(--line);border-radius:11px}
+.seg button{border:0;background:transparent;color:var(--muted);font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:8px;cursor:pointer;transition:.16s;display:flex;align-items:center;gap:7px}
+.seg button.on{background:var(--card-hover);color:var(--text)}
+.seg button .n{font-variant-numeric:tabular-nums;opacity:.7}
+.finput{flex:1;min-width:180px;max-width:320px;display:flex;align-items:center;gap:9px;height:38px;padding:0 13px;border-radius:11px;background:rgba(11,18,32,.6);border:1px solid var(--line);transition:.16s}
+.finput:focus-within{border-color:rgba(79,124,255,.4);box-shadow:0 0 0 3px rgba(79,124,255,.12)}
+.finput svg{width:15px;height:15px;color:var(--muted)}
+.finput input{flex:1;background:0;border:0;outline:0;color:var(--text);font:inherit;font-size:13px}
+
+/* ── skeleton ── */
+.skel{background:linear-gradient(100deg,rgba(148,163,184,.05) 30%,rgba(148,163,184,.14) 50%,rgba(148,163,184,.05) 70%);background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:8px}
+@keyframes shimmer{to{background-position:-200% 0}}
+.skel-card{height:190px;border-radius:var(--r-lg)}
+
+/* ── empty state ── */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:64px 24px;min-height:340px}
+.empty .ill{width:88px;height:88px;border-radius:24px;display:grid;place-items:center;background:radial-gradient(circle at 40% 30%,rgba(79,124,255,.16),rgba(56,189,248,.06));border:1px solid var(--line-2);margin-bottom:22px;position:relative}
+.empty .ill svg{width:38px;height:38px;color:var(--accent-2)}
+.empty .ill::after{content:"";position:absolute;inset:-1px;border-radius:inherit;box-shadow:var(--glow-accent);opacity:.5}
+.empty h3{margin:0 0 8px;font-size:18px;font-weight:700}
+.empty p{margin:0;color:var(--muted);font-size:13.5px;max-width:400px}
+.empty .phase{margin-top:18px;display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;color:var(--accent-2);background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);padding:5px 12px;border-radius:20px}
+
+/* ── buttons ── */
+.btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border-radius:11px;border:1px solid var(--line-2);background:rgba(148,163,184,.06);color:var(--text);font-weight:600;font-size:13px;cursor:pointer;transition:.18s var(--ease)}
+.btn:hover{background:rgba(148,163,184,.13);transform:translateY(-1px)}
+.btn svg{width:15px;height:15px}
+.btn.primary{background:linear-gradient(135deg,var(--accent),#3b63e0);border-color:transparent;box-shadow:var(--glow-accent)}
+.btn.primary:hover{box-shadow:0 0 0 1px rgba(79,124,255,.4),0 16px 50px -12px rgba(79,124,255,.5)}
+.btn.sm{height:32px;padding:0 12px;font-size:12.5px}
+
+/* ── drawer ── */
+.scrim{position:fixed;inset:0;background:rgba(3,6,14,.6);backdrop-filter:blur(3px);z-index:40;opacity:0;visibility:hidden;transition:.28s}
+.scrim.show{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,94vw);z-index:50;background:linear-gradient(180deg,var(--bg-2),var(--bg));border-left:1px solid var(--line-2);box-shadow:var(--shadow-lg);transform:translateX(100%);transition:transform .34s var(--ease);display:flex;flex-direction:column}
+.drawer.show{transform:none}
+.drawer-h{padding:var(--s3);border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:16px}
+.drawer-b{flex:1;overflow-y:auto;padding:var(--s3);display:flex;flex-direction:column;gap:var(--s2)}
+.det-block{background:rgba(148,163,184,.04);border:1px solid var(--line);border-radius:var(--r);padding:var(--s2) var(--s3)}
+.det-block h4{margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px}
+.kv{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;border-bottom:1px solid var(--line)}
+.kv:last-child{border-bottom:0}.kv .k{color:var(--muted)}.kv .v{font-weight:600;font-variant-numeric:tabular-nums}
+.chart-wrap{margin-top:4px}
+
+/* ── command palette ── */
+.cmdk{position:fixed;inset:0;z-index:60;display:flex;align-items:flex-start;justify-content:center;padding-top:14vh;background:rgba(3,6,14,.55);backdrop-filter:blur(6px);opacity:0;visibility:hidden;transition:.18s}
+.cmdk.show{opacity:1;visibility:visible}
+.cmdk-box{width:min(620px,92vw);max-height:64vh;background:var(--glass-2);backdrop-filter:blur(30px) saturate(150%);border:1px solid var(--line-2);border-radius:var(--r-xl);box-shadow:var(--shadow-lg);overflow:hidden;display:flex;flex-direction:column;transform:scale(.97) translateY(-8px);transition:.2s var(--spring)}
+.cmdk.show .cmdk-box{transform:none}
+.cmdk-in{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.cmdk-in svg{width:18px;height:18px;color:var(--muted)}
+.cmdk-in input{flex:1;background:0;border:0;outline:0;color:var(--text);font:inherit;font-size:15.5px}
+.cmdk-list{overflow-y:auto;padding:8px}
+.cmd-row{display:flex;align-items:center;gap:13px;padding:11px 14px;border-radius:11px;cursor:pointer;color:var(--muted)}
+.cmd-row .ci{width:32px;height:32px;border-radius:9px;background:rgba(148,163,184,.08);display:grid;place-items:center;flex:0 0 32px}
+.cmd-row .ci svg{width:16px;height:16px}
+.cmd-row .cl{flex:1;min-width:0}
+.cmd-row .cl .t{color:var(--text);font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmd-row .cl .s{font-size:11.5px;color:var(--unknown)}
+.cmd-row.sel,.cmd-row:hover{background:var(--card-hover);color:var(--text)}
+.cmd-grp{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--unknown);padding:12px 14px 6px}
+
+/* ── toasts ── */
+.toasts{position:fixed;bottom:24px;right:24px;z-index:70;display:flex;flex-direction:column;gap:10px;max-width:360px}
+.toast{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:var(--r);background:var(--glass-2);backdrop-filter:blur(20px);border:1px solid var(--line-2);box-shadow:var(--shadow-lg);animation:toastIn .35s var(--spring)}
+.toast.out{animation:toastOut .3s var(--ease) forwards}
+.toast .ti{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:0 0 30px}
+.toast .ti svg{width:16px;height:16px}
+.toast.t-crit .ti{background:rgba(244,63,94,.14);color:var(--crit)} .toast.t-ok .ti{background:rgba(34,197,94,.14);color:var(--ok)} .toast.t-warn .ti{background:rgba(250,204,21,.14);color:var(--warn)}
+.toast .tt{font-weight:600;font-size:13px} .toast .ts{font-size:12px;color:var(--muted);margin-top:2px}
+@keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+@keyframes toastOut{to{opacity:0;transform:translateX(40px)}}
+
+/* ── gate ── */
+.gate{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 0%,#0d1526,var(--bg))}
+.gate-box{width:min(400px,92vw);text-align:center;padding:44px 36px;background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--line-2);border-radius:var(--r-xl);box-shadow:var(--shadow-lg)}
+.gate-box .logo{width:56px;height:56px;border-radius:16px;margin:0 auto 20px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:var(--glow-accent)}
+.gate-box .logo svg{width:28px;height:28px;color:#fff}
+.gate-box h2{margin:0 0 6px;font-size:20px;font-weight:800}
+.gate-box p{margin:0 0 24px;color:var(--muted);font-size:13px}
+.gate-box input{width:100%;height:44px;padding:0 16px;border-radius:12px;background:rgba(11,18,32,.7);border:1px solid var(--line-2);color:var(--text);font:inherit;font-size:14px;outline:0;margin-bottom:14px;transition:.18s}
+.gate-box input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,124,255,.15)}
+.gate-box .btn{width:100%;justify-content:center;height:44px}
+.gate-err{color:var(--crit);font-size:12.5px;margin-bottom:12px;min-height:16px}
+
+.spin{width:16px;height:16px;border:2px solid rgba(148,163,184,.25);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.count{font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 </style>
 </head>
 <body>
+<div class="bg-layer bg-grid"></div>
+<div class="bg-glow-a"></div><div class="bg-glow-b"></div><div class="bg-noise"></div>
 
-<div class="gate" id="gate">
-  <div class="box">
-    <div class="beat" style="margin:0 auto 14px"></div>
-    <h3>Pulse</h3>
-    <p>Enter access token to view the fleet</p>
-    <input id="tok" type="password" placeholder="access token" autocomplete="off"
+<!-- ══════════ GATE ══════════ -->
+<div id="gate" class="gate hidden">
+  <div class="gate-box">
+    <div class="logo"><i data-lucide="activity"></i></div>
+    <h2>Pulse</h2>
+    <p>Enter your access token to view the fleet</p>
+    <div id="gateErr" class="gate-err"></div>
+    <input id="tok" type="password" placeholder="Access token" autocomplete="off" spellcheck="false"
            onkeydown="if(event.key==='Enter')saveToken()">
-    <button onclick="saveToken()">Unlock</button>
-    <div class="err" id="gateErr"></div>
+    <button class="btn primary" onclick="saveToken()"><span>Unlock Fleet</span></button>
   </div>
 </div>
 
-<header>
-  <div class="logo"><span class="beat"></span> <span>Pulse</span></div>
-  <div class="fleet-pill" id="fleetPill">—</div>
-  <div class="spacer"></div>
-  <div class="meta">
-    <div>Sweep <b id="sweepMs">—</b></div>
-    <div>Updated <b id="updated">—</b></div>
-    <div class="live"><i></i> live</div>
+<!-- ══════════ APP ══════════ -->
+<div id="app" class="hidden">
+  <div class="nav">
+    <div class="brand"><span class="logo"><i data-lucide="activity"></i></span>Pulse</div>
+    <div class="nav-sep"></div>
+    <div class="chip" title="Workspace"><i data-lucide="layers" style="width:14px;height:14px"></i>Crown Fleet<i data-lucide="chevron-down" style="width:13px;height:13px"></i></div>
+    <div class="chip env"><span class="dot" style="background:var(--accent-2)"></span>Production</div>
+    <div class="nav-search" onclick="openCmd()">
+      <i data-lucide="search"></i><span>Search servers, commands…</span>
+      <span class="kbd"><b>⌘</b><b>K</b></span>
+    </div>
+    <div class="nav-spacer"></div>
+    <button class="icon-btn" id="notifBtn" title="Alerts" onclick="go('incidents')" aria-label="Alerts"><i data-lucide="bell"></i><span class="badge hidden" id="notifBadge">0</span></button>
+    <div class="live-pill"><span class="dot"></span>Live</div>
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="nav-sep"></div>
+    <div class="avatar" title="Aditya">A</div>
   </div>
-</header>
 
-<main>
-  <div class="kpis" id="kpis"></div>
-  <div class="roles" id="roles"></div>
-  <div class="phase">Phase 1 · <b>Observer</b> — read-only. No write access to production. ·
-       <span id="ver"></span></div>
-</main>
+  <div class="body">
+    <nav class="side" id="side" aria-label="Primary">
+      <div class="side-label">Monitor</div>
+      <div class="nav-item active" data-view="overview" onclick="go('overview')"><i data-lucide="layout-dashboard"></i><span class="txt">Overview</span></div>
+      <div class="nav-item" data-view="servers" onclick="go('servers')"><i data-lucide="server"></i><span class="txt">Servers</span></div>
+      <div class="nav-item" data-view="topology" onclick="go('topology')"><i data-lucide="network"></i><span class="txt">Topology</span></div>
+      <div class="side-label">Operations</div>
+      <div class="nav-item" data-view="incidents" onclick="go('incidents')"><i data-lucide="siren"></i><span class="txt">Incidents</span><span class="soon">SOON</span></div>
+      <div class="nav-item" data-view="logs" onclick="go('logs')"><i data-lucide="scroll-text"></i><span class="txt">Logs</span><span class="soon">SOON</span></div>
+      <div class="nav-item" data-view="calls" onclick="go('calls')"><i data-lucide="phone-call"></i><span class="txt">Calls</span><span class="soon">SOON</span></div>
+      <div class="nav-item" data-view="routes" onclick="go('routes')"><i data-lucide="route"></i><span class="txt">Routes</span><span class="soon">SOON</span></div>
+      <div class="side-label">Intelligence</div>
+      <div class="nav-item" data-view="ai" onclick="go('ai')"><i data-lucide="sparkles"></i><span class="txt">AI Copilot</span><span class="soon">SOON</span></div>
+      <div class="side-foot">
+        <div class="collapse-btn" onclick="toggleSide()"><i data-lucide="chevrons-left"></i><span class="txt">Collapse</span></div>
+      </div>
+    </nav>
 
-<div class="drawer" id="drawer">
-  <div class="dh">
-    <span class="beat" id="drawerDot"></span>
-    <div><div id="drawerName" style="font-weight:700"></div>
-         <div id="drawerIp" style="color:var(--dim);font-family:var(--mono);font-size:12px"></div></div>
-    <span class="x" onclick="closeDrawer()">×</span>
+    <main class="main" id="main"></main>
   </div>
-  <div class="db" id="drawerBody"></div>
 </div>
+
+<div id="scrim" class="scrim" onclick="closeDrawer()"></div>
+<aside id="drawer" class="drawer" role="dialog" aria-label="Server detail"></aside>
+
+<div id="cmdk" class="cmdk" onclick="if(event.target.id==='cmdk')closeCmd()">
+  <div class="cmdk-box">
+    <div class="cmdk-in"><i data-lucide="search"></i><input id="cmdInput" placeholder="Type a command or search…" oninput="renderCmd()" onkeydown="cmdKey(event)"></div>
+    <div class="cmdk-list" id="cmdList"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
 
 <script>
-const ROLE_LABEL = {IVG:"FreeSWITCH", OPS:"OpenSIPS", VOSS:"VOS3000"};
-const PILL_COLOR = {healthy:"var(--ok)", warning:"var(--warn)", critical:"var(--crit)",
-                    degraded:"var(--unknown)"};
-let TOKEN = localStorage.getItem("pulse_token") || "";
-let timer = null;
+/* ══════════════════════════ STATE ══════════════════════════ */
+let TOKEN = localStorage.getItem('pulse_token') || '';
+let FLEET = null;              // last /api/fleet payload
+let STATUS = null;             // last /api/status payload
+let VIEW = 'overview';
+let PREV_STATUS = {};          // hostname -> status (for transition toasts)
+let HEALTH_SERIES = [];        // rolling fleet health % for the overview sparkline
+let SRV_FILTER = {role:'all', status:'all', q:''};
+let charts = {};               // apexcharts instances in the drawer
+let firstPaint = true;
+let refreshTimer = null, clockTimer = null;
 
-function hdrs(){ return TOKEN ? {"X-Pulse-Token":TOKEN} : {}; }
+const ICONS = {ok:'check-circle-2', warn:'alert-triangle', crit:'x-circle', unknown:'help-circle'};
+const ROLE_NAME = {IVG:'FreeSWITCH', OPS:'OpenSIPS', VOSS:'VOS3000'};
+const PROBE_LABEL = {freeswitch:'FreeSWITCH',sofia:'Sofia',registrations:'Registrations',load:'Load',
+  opensips:'OpenSIPS',sip_5060:'SIP :5060',rogue_sip:'Rogue SIP',root_disk:'Root disk',
+  mysql:'MySQL',gui_1355:'GUI :1355',webserver:'Web admin',callservice:'Call service'};
+const NUMERIC_PROBE = {load:1, root_disk:1};   // probes whose value is chartable as a number
 
+/* ══════════════════════════ API ══════════════════════════ */
+function hdrs(){ return TOKEN ? {'X-Pulse-Token':TOKEN} : {}; }
 async function api(path){
-  const r = await fetch(path, {headers:hdrs()});
-  if(r.status === 401){ throw {auth:true}; }
-  if(!r.ok) throw new Error("http "+r.status);
+  const r = await fetch(path,{headers:hdrs()});
+  if(r.status===401) throw {auth:true};
+  if(!r.ok) throw new Error('http '+r.status);
   return r.json();
 }
+function icon(){ if(window.lucide) lucide.createIcons(); }
 
-function saveToken(){
-  const v = document.getElementById("tok").value.trim();
-  TOKEN = v; localStorage.setItem("pulse_token", v);
-  document.getElementById("gate").classList.remove("show");
-  document.getElementById("gateErr").textContent = "";
-  boot();
-}
+/* ══════════════════════════ AUTH / GATE ══════════════════════════ */
 function showGate(msg){
-  document.getElementById("gate").classList.add("show");
-  if(msg) document.getElementById("gateErr").textContent = msg;
+  document.getElementById('app').classList.add('hidden');
+  const g=document.getElementById('gate'); g.classList.remove('hidden');
+  document.getElementById('gateErr').textContent = msg||'';
+  icon(); setTimeout(()=>document.getElementById('tok').focus(),60);
 }
-
-function ago(ts){
-  if(!ts) return "never";
-  const s = Math.max(0, Math.floor(Date.now()/1000 - ts));
-  if(s<60) return s+"s ago"; if(s<3600) return Math.floor(s/60)+"m ago";
-  return Math.floor(s/3600)+"h ago";
-}
-
-function kpi(cls,label,n){
-  return `<div class="kpi ${cls}"><div class="label">${label}</div>
-          <div class="num" data-n="${n}">0</div><div class="bar"></div></div>`;
-}
-function countUp(){
-  document.querySelectorAll(".kpi .num").forEach(el=>{
-    const target = +el.dataset.n || 0; let cur = 0;
-    const step = Math.max(1, Math.ceil(target/18));
-    const t = setInterval(()=>{ cur += step; if(cur>=target){cur=target;clearInterval(t)}
-      el.textContent = cur; }, 22);
-  });
-}
-
-function hostRow(h){
-  const chips = h.probes.map(p =>
-    `<span class="chip ${p.status}">${p.name} ${p.value||""}</span>`).join("");
-  return `<div class="host" onclick='openHost(${JSON.stringify(h.hostname)})'>
-    <span class="dot ${h.status}"></span>
-    <span class="name">${h.hostname}</span><span class="ip">${h.ip}</span>
-    <span class="chips">${chips}</span></div>`;
-}
-
-function render(data){
-  // fleet pill
-  const pill = document.getElementById("fleetPill");
-  pill.textContent = data.fleet_status;
-  pill.style.color = PILL_COLOR[data.fleet_status] || "var(--muted)";
-  pill.style.borderColor = (PILL_COLOR[data.fleet_status]||"var(--line)");
-
-  // KPIs
-  const t = data.totals;
-  document.getElementById("kpis").innerHTML =
-    kpi("total","Hosts",t.hosts) + kpi("ok","Healthy",t.ok) +
-    kpi("warn","Warning",t.warn) + kpi("crit","Critical",t.crit) +
-    kpi("unknown","Unknown",t.unknown);
-  countUp();
-
-  // role columns
-  const byRole = {IVG:[],OPS:[],VOSS:[]};
-  data.hosts.forEach(h => (byRole[h.role]||(byRole[h.role]=[])).push(h));
-  const order = ["OPS","IVG","VOSS"];
-  document.getElementById("roles").innerHTML = order.map(role=>{
-    const list = byRole[role]||[]; const r = data.roles[role]||{total:0,crit:0,warn:0};
-    const rows = list.length ? list.map(hostRow).join("")
-      : `<div style="color:var(--dim);padding:14px;text-align:center">no ${role} hosts in inventory</div>`;
-    return `<div class="role"><h2><span class="dot ${r.crit?'crit':r.warn?'warn':'ok'}"></span>
-      ${ROLE_LABEL[role]} <span class="tag">${role}</span>
-      <span class="cnt">${r.total||0} hosts</span></h2>
-      <div class="body">${rows}</div></div>`;
-  }).join("");
-
-  document.getElementById("updated").textContent = ago(data.ts);
-}
-
-let LAST = {};
-async function refresh(){
+async function saveToken(){
+  const v=document.getElementById('tok').value.trim();
+  if(!v){ document.getElementById('gateErr').textContent='Token required'; return; }
+  TOKEN=v;
   try{
-    const [fleet, st] = await Promise.all([api("/api/fleet"), api("/api/status")]);
-    LAST = fleet; render(fleet);
-    document.getElementById("sweepMs").textContent = (st.sweep_ms||0)+"ms";
-    document.getElementById("ver").textContent = "v"+st.version;
-  }catch(e){
-    if(e && e.auth){ clearInterval(timer); showGate("Invalid token."); }
+    await api('/api/status');
+    localStorage.setItem('pulse_token',v);
+    document.getElementById('gate').classList.add('hidden');
+    boot();
+  }catch(err){
+    if(err&&err.auth){ document.getElementById('gateErr').textContent='Invalid token — try again'; document.getElementById('tok').value=''; }
+    else document.getElementById('gateErr').textContent='Connection error';
+  }
+}
+function logout(){ localStorage.removeItem('pulse_token'); TOKEN=''; if(refreshTimer)clearInterval(refreshTimer); location.reload(); }
+
+/* ══════════════════════════ NAV / VIEW ══════════════════════════ */
+function go(view){
+  VIEW=view;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===view));
+  render();
+  closeCmd();
+}
+function toggleSide(){ document.getElementById('side').classList.toggle('collapsed'); }
+
+/* ══════════════════════════ HELPERS ══════════════════════════ */
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function ago(ts){
+  if(!ts) return 'never';
+  const s=Math.max(0,Math.floor(Date.now()/1000-ts));
+  if(s<60) return s+'s ago'; if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago';
+}
+function healthScore(probes){
+  if(!probes||!probes.length) return 0;
+  const m={ok:100,warn:55,crit:0,unknown:50};
+  return Math.round(probes.reduce((a,p)=>a+(m[p.status]??50),0)/probes.length);
+}
+function scoreColor(s){ return s>=85?'var(--ok)':s>=55?'var(--warn)':s>0?'var(--crit)':'var(--unknown)'; }
+/* animate a number element from its current value to target */
+function animateCount(el,to){
+  const from=parseFloat(el.dataset.v||'0')||0; if(from===to){el.textContent=to;return;}
+  el.dataset.v=to; const t0=performance.now(), dur=650;
+  (function step(now){
+    const k=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-k,3);
+    el.textContent=Math.round(from+(to-from)*e);
+    if(k<1) requestAnimationFrame(step);
+  })(performance.now());
+}
+/* mouse-follow glow on hoverable cards */
+document.addEventListener('mousemove',e=>{
+  const c=e.target.closest && e.target.closest('.card.hoverable'); if(!c)return;
+  const r=c.getBoundingClientRect();
+  c.style.setProperty('--mx',(e.clientX-r.left)+'px'); c.style.setProperty('--my',(e.clientY-r.top)+'px');
+},{passive:true});
+
+/* ══════════════════════════ CLOCK ══════════════════════════ */
+function startClock(){
+  const tick=()=>{ document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB'); };
+  tick(); if(!clockTimer) clockTimer=setInterval(tick,1000);
+}
+/* ══════════════════════════ RENDER ROUTER ══════════════════════════ */
+function render(){
+  const m=document.getElementById('main');
+  if(VIEW==='overview')      m.innerHTML=renderOverview();
+  else if(VIEW==='servers')  m.innerHTML=renderServers();
+  else if(VIEW==='topology') { m.innerHTML=renderTopologyShell(); drawTopology(); }
+  else                       m.innerHTML=renderEmpty(VIEW);
+  icon();
+  if(VIEW==='overview' && FLEET) paintOverviewCounts();
+}
+
+/* ── SKELETONS ── */
+function skelGrid(n,cls){ let h='<div class="grid '+cls+'">'; for(let i=0;i<n;i++) h+='<div class="skel skel-card"></div>'; return h+'</div>'; }
+function loadingView(){
+  return '<div class="page-head"><div><h1>Fleet Overview</h1><p>Connecting to the control plane…</p></div></div>'
+    +'<div class="skel" style="height:76px;border-radius:18px;margin-bottom:24px"></div>'
+    +'<div class="grid stats">'+Array(5).fill('<div class="skel" style="height:132px;border-radius:18px"></div>').join('')+'</div>'
+    +'<div class="grid roles" style="margin-top:16px">'+Array(3).fill('<div class="skel" style="height:150px;border-radius:18px"></div>').join('')+'</div>';
+}
+
+/* ══════════════════════════ OVERVIEW ══════════════════════════ */
+function renderOverview(){
+  if(!FLEET) return loadingView();
+  const t=FLEET.totals, st=FLEET.fleet_status;
+  const bMeta={healthy:['shield-check','All systems operational'],warning:['alert-triangle','Degraded — warnings present'],
+    critical:['shield-alert','Critical — action required'],degraded:['help-circle','Awaiting first sweep']}[st]||['activity',''];
+  const swept = STATUS && STATUS.last_sweep ? ago(STATUS.last_sweep) : '—';
+  const sweepMs = STATUS && STATUS.sweep_ms ? STATUS.sweep_ms+' ms' : '—';
+
+  let h='<div class="view">';
+  h+='<div class="page-head"><div><h1>Fleet Overview</h1><p>'+t.hosts+' hosts across FreeSWITCH, OpenSIPS & VOS3000 · read-only observer</p></div>'
+    +'<button class="btn sm" onclick="manualRefresh(this)"><i data-lucide="refresh-cw"></i>Refresh</button></div>';
+
+  h+='<div class="banner '+st+'"><div class="b-ico"><i data-lucide="'+bMeta[0]+'"></i></div>'
+    +'<div><h3>'+bMeta[1]+'</h3><p>Fleet status computed from live probe roll-up across every reachable host</p></div>'
+    +'<div class="b-meta">Last sweep '+swept+'<br>Sweep time '+sweepMs+'</div></div>';
+
+  // stat cards
+  const cards=[['total','layers','Total hosts',t.hosts],['ok','check-circle-2','Healthy',t.ok],
+    ['warn','alert-triangle','Warning',t.warn],['crit','x-circle','Critical',t.crit],['unknown','help-circle','Unknown',t.unknown]];
+  h+='<div class="grid stats">';
+  for(const [tone,ic,lbl,val] of cards){
+    h+='<div class="card stat tone-'+tone+'"><div class="s-top"><div class="s-ico"><i data-lucide="'+ic+'"></i></div></div>'
+      +'<div class="s-num count" id="stat-'+tone+'" data-v="0">0</div><div class="s-lbl">'+lbl+'</div></div>';
+  }
+  h+='</div>';
+
+  // role breakdown
+  h+='<div class="grid roles">';
+  for(const role of ['IVG','OPS','VOSS']){
+    const r=FLEET.roles[role]||{ok:0,warn:0,crit:0,unknown:0,total:0};
+    const tot=r.total||1;
+    const seg=(k,c)=>r[k]?'<i class="'+c+'" style="width:'+(r[k]/tot*100)+'%"></i>':'';
+    h+='<div class="card hoverable" onclick="filterRole(\''+role+'\')"><div class="role-h">'
+      +'<div class="role-badge role-'+role+'">'+role+'</div>'
+      +'<div><div class="r-name">'+ROLE_NAME[role]+'</div><div class="r-sub">'+r.total+' hosts</div></div>'
+      +'<div class="r-count">'+(Math.round((r.ok/tot)*100))+'%</div></div>'
+      +'<div class="stackbar">'+seg('ok','sb-ok')+seg('warn','sb-warn')+seg('crit','sb-crit')+seg('unknown','sb-unknown')+'</div>'
+      +'<div class="role-legend">'
+      +'<span><b class="sb-ok"></b>'+r.ok+' ok</span><span><b class="sb-warn"></b>'+r.warn+' warn</span>'
+      +'<span><b class="sb-crit"></b>'+r.crit+' crit</span><span><b class="sb-unknown"></b>'+r.unknown+' unk</span></div></div>';
+  }
+  h+='</div>';
+
+  // fleet health trend
+  h+='<div class="card" style="margin-top:16px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+    +'<i data-lucide="line-chart" style="width:17px;height:17px;color:var(--accent-2)"></i>'
+    +'<b style="font-size:14px">Fleet health trend</b>'
+    +'<span style="margin-left:auto;color:var(--muted);font-size:12px">healthy hosts, live</span></div>'
+    +'<div id="fleetTrend" class="chart-wrap" style="height:170px"></div></div>';
+
+  h+='</div>';
+  return h;
+}
+function paintOverviewCounts(){
+  const t=FLEET.totals;
+  const map={total:t.hosts,ok:t.ok,warn:t.warn,crit:t.crit,unknown:t.unknown};
+  for(const k in map){ const el=document.getElementById('stat-'+k); if(el) animateCount(el,map[k]); }
+  drawFleetTrend();
+}
+function drawFleetTrend(){
+  const el=document.getElementById('fleetTrend'); if(!el||!window.ApexCharts) return;
+  const data=HEALTH_SERIES.slice(-40);
+  const opt={chart:{type:'area',height:170,sparkline:{enabled:false},animations:{easing:'easeinout',dynamicAnimation:{speed:600}},toolbar:{show:false},fontFamily:'Inter'},
+    series:[{name:'Healthy',data:data.map(d=>d.v)}],
+    xaxis:{categories:data.map(d=>d.t),labels:{show:false},axisBorder:{show:false},axisTicks:{show:false}},
+    yaxis:{labels:{style:{colors:'#94A3B8'},formatter:v=>Math.round(v)},min:0},
+    grid:{borderColor:'rgba(148,163,184,.08)',strokeDashArray:4,padding:{left:6,right:6}},
+    stroke:{curve:'smooth',width:2.5,colors:['#4F7CFF']},
+    fill:{type:'gradient',gradient:{shadeIntensity:1,opacityFrom:.4,opacityTo:0,stops:[0,100],colorStops:[[{offset:0,color:'#4F7CFF',opacity:.35},{offset:100,color:'#4F7CFF',opacity:0}]]}},
+    dataLabels:{enabled:false},tooltip:{theme:'dark'},colors:['#4F7CFF']};
+  if(charts.trend){ charts.trend.updateSeries([{name:'Healthy',data:data.map(d=>d.v)}]); }
+  else { charts.trend=new ApexCharts(el,opt); charts.trend.render(); }
+}
+
+/* ══════════════════════════ SERVERS ══════════════════════════ */
+function filterRole(role){ SRV_FILTER.role=role; go('servers'); }
+function renderServers(){
+  if(!FLEET) return '<div class="view">'+skelGrid(6,'servers')+'</div>';
+  const t=FLEET.totals;
+  let h='<div class="view"><div class="page-head"><div><h1>Servers</h1><p>Every host, live health from the latest probe sweep</p></div></div>';
+  // filter bar
+  h+='<div class="filterbar">';
+  h+='<div class="finput"><i data-lucide="search"></i><input id="srvq" placeholder="Filter by hostname or IP…" value="'+esc(SRV_FILTER.q)+'" oninput="SRV_FILTER.q=this.value;paintServers()"></div>';
+  h+='<div class="seg" id="segRole">';
+  for(const [k,l] of [['all','All'],['IVG','IVG'],['OPS','OPS'],['VOSS','VOSS']])
+    h+='<button class="'+(SRV_FILTER.role===k?'on':'')+'" onclick="SRV_FILTER.role=\''+k+'\';paintServers()">'+l+'</button>';
+  h+='</div>';
+  h+='<div class="seg" id="segStatus">';
+  for(const [k,l,n] of [['all','All',t.hosts],['ok','Healthy',t.ok],['warn','Warning',t.warn],['crit','Critical',t.crit],['unknown','Unknown',t.unknown]])
+    h+='<button class="'+(SRV_FILTER.status===k?'on':'')+'" onclick="SRV_FILTER.status=\''+k+'\';paintServers()">'+l+' <span class="n">'+n+'</span></button>';
+  h+='</div></div>';
+  h+='<div class="grid servers" id="srvGrid"></div></div>';
+  setTimeout(paintServers,0);
+  return h;
+}
+function matchFilter(host){
+  if(SRV_FILTER.role!=='all' && host.role!==SRV_FILTER.role) return false;
+  if(SRV_FILTER.status!=='all' && host.status!==SRV_FILTER.status) return false;
+  const q=SRV_FILTER.q.trim().toLowerCase();
+  if(q && !(host.hostname.toLowerCase().includes(q)||host.ip.includes(q))) return false;
+  return true;
+}
+function paintServers(){
+  const grid=document.getElementById('srvGrid'); if(!grid||!FLEET) return;
+  const hosts=FLEET.hosts.filter(matchFilter);
+  if(!hosts.length){ grid.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="ill"><i data-lucide="search-x"></i></div><h3>No servers match</h3><p>Try clearing the search or a different status filter.</p></div>'; icon(); return; }
+  grid.innerHTML=hosts.map(serverCard).join('');
+  icon();
+}
+function serverCard(host){
+  const score=healthScore(host.probes), col=scoreColor(score);
+  const C=2*Math.PI*22, off=C*(1-score/100);
+  let chips='';
+  for(const p of host.probes){
+    chips+='<div class="pchip"><span class="pdot d-'+p.status+'"></span><span class="pn">'+(PROBE_LABEL[p.name]||p.name)+'</span>'
+      +'<span class="pv">'+esc(p.value||'—')+'</span></div>';
+  }
+  return '<div class="card hoverable srv" onclick="openHost(\''+esc(host.hostname)+'\')">'
+    +'<div class="srv-top">'
+    +'<div class="srv-ring"><svg width="52" height="52"><circle cx="26" cy="26" r="22" fill="none" stroke="rgba(148,163,184,.12)" stroke-width="4"/>'
+    +'<circle cx="26" cy="26" r="22" fill="none" stroke="'+col+'" stroke-width="4" stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+off+'" style="transition:stroke-dashoffset .7s var(--ease)"/></svg>'
+    +'<div class="score" style="color:'+col+'">'+score+'</div></div>'
+    +'<div class="srv-id"><div class="h">'+esc(host.hostname)+'</div><div class="ip">'+esc(host.ip)+'</div></div>'
+    +'<div class="role-tag tag-'+host.role+'">'+host.role+'</div></div>'
+    +'<div class="srv-probes">'+chips+'</div></div>';
+}
+
+/* ══════════════════════════ TOPOLOGY ══════════════════════════ */
+function renderTopologyShell(){
+  return '<div class="view"><div class="page-head"><div><h1>Topology</h1><p>Control plane → role clusters → live hosts</p></div></div>'
+    +'<div class="card" style="padding:0;overflow:hidden"><div id="topo" style="height:min(70vh,640px);position:relative"></div></div></div>';
+}
+function drawTopology(){
+  const box=document.getElementById('topo'); if(!box||!FLEET) return;
+  const W=box.clientWidth||900, H=box.clientHeight||560, cx=W/2, cy=H/2;
+  const roles=['IVG','OPS','VOSS'], rc={};
+  roles.forEach((r,i)=>{ const a=(-90+i*120)*Math.PI/180; rc[r]={x:cx+Math.cos(a)*Math.min(230,W*0.26),y:cy+Math.sin(a)*Math.min(180,H*0.32)}; });
+  let svg='<svg width="100%" height="100%" viewBox="0 0 '+W+' '+H+'" style="display:block">';
+  svg+='<defs><radialGradient id="gcore"><stop offset="0%" stop-color="#4F7CFF"/><stop offset="100%" stop-color="#3b63e0"/></radialGradient></defs>';
+  // links core->role
+  for(const r of roles) svg+='<line x1="'+cx+'" y1="'+cy+'" x2="'+rc[r].x+'" y2="'+rc[r].y+'" stroke="rgba(79,124,255,.25)" stroke-width="2" stroke-dasharray="5 6"><animate attributeName="stroke-dashoffset" from="22" to="0" dur="1s" repeatCount="indefinite"/></line>';
+  // host nodes around each role hub
+  for(const r of roles){
+    const hs=FLEET.hosts.filter(h=>h.role===r); const n=hs.length||1;
+    hs.forEach((h,i)=>{
+      const a=(i/n)*2*Math.PI, rad=64+Math.min(48,n*1.4);
+      const x=rc[r].x+Math.cos(a)*rad, y=rc[r].y+Math.sin(a)*rad;
+      const col=({ok:'#22C55E',warn:'#FACC15',crit:'#F43F5E',unknown:'#64748B'})[h.status];
+      svg+='<line x1="'+rc[r].x+'" y1="'+rc[r].y+'" x2="'+x+'" y2="'+y+'" stroke="rgba(148,163,184,.12)" stroke-width="1"/>';
+      svg+='<circle cx="'+x+'" cy="'+y+'" r="5" fill="'+col+'" style="cursor:pointer" onclick="openHost(\''+esc(h.hostname)+'\')"><title>'+esc(h.hostname)+' · '+esc(h.ip)+' · '+h.status+'</title></circle>';
+      if(h.status==='crit') svg+='<circle cx="'+x+'" cy="'+y+'" r="5" fill="none" stroke="'+col+'" stroke-width="1.5"><animate attributeName="r" from="5" to="13" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" from=".7" to="0" dur="1.6s" repeatCount="indefinite"/></circle>';
+    });
+    svg+='<circle cx="'+rc[r].x+'" cy="'+rc[r].y+'" r="26" fill="rgba(17,24,39,.9)" stroke="rgba(148,163,184,.25)" stroke-width="1.5"/>';
+    svg+='<text x="'+rc[r].x+'" y="'+(rc[r].y+4)+'" text-anchor="middle" fill="#F8FAFC" font-size="12" font-weight="700" font-family="Inter">'+r+'</text>';
+  }
+  svg+='<circle cx="'+cx+'" cy="'+cy+'" r="34" fill="url(#gcore)" stroke="rgba(255,255,255,.2)" stroke-width="1.5"/>';
+  svg+='<text x="'+cx+'" y="'+(cy+5)+'" text-anchor="middle" fill="#fff" font-size="13" font-weight="800" font-family="Inter">Pulse</text>';
+  svg+='</svg>';
+  box.innerHTML=svg;
+}
+
+/* ══════════════════════════ EMPTY (Phase 2) ══════════════════════════ */
+function renderEmpty(v){
+  const meta={
+    incidents:['siren','Incident timeline','Auto-detected incidents with a live timeline, evidence cards and remediation history will land here when the auto-heal engine ships.'],
+    logs:['scroll-text','Unified logs','Streaming, searchable logs from every FreeSWITCH, OpenSIPS and VOS3000 box in one pane.'],
+    calls:['phone-call','Live calls','Real-time call volume, ASR/ACD and MOS quality across the fleet.'],
+    routes:['route','Route health','Per-carrier route status, failover state and cost — mapped to live call outcomes.'],
+    ai:['sparkles','AI Copilot','A Jarvis-style operator: ask the fleet a question, get evidence-backed answers and one-click remediation drafts. Phase 2, running on the local model — no data leaves the box.']
+  }[v]||['box','Coming soon',''];
+  return '<div class="view"><div class="page-head"><div><h1>'+meta[1]+'</h1><p>Not wired to live data yet</p></div></div>'
+    +'<div class="card"><div class="empty"><div class="ill"><i data-lucide="'+meta[0]+'"></i></div>'
+    +'<h3>'+meta[1]+'</h3><p>'+meta[2]+'</p>'
+    +'<div class="phase"><i data-lucide="rocket" style="width:13px;height:13px"></i>Phase 2 — read-only observer ships first</div></div></div></div>';
+}
+/* ══════════════════════════ DRAWER ══════════════════════════ */
+async function openHost(name){
+  const d=document.getElementById('drawer');
+  d.classList.add('show'); document.getElementById('scrim').classList.add('show');
+  d.innerHTML='<div class="drawer-h"><div class="srv-ring"><div class="spin" style="margin:16px"></div></div>'
+    +'<div style="flex:1"><div class="skel" style="height:20px;width:60%;margin-bottom:8px"></div><div class="skel" style="height:14px;width:40%"></div></div>'
+    +'<button class="icon-btn" onclick="closeDrawer()" aria-label="Close"><i data-lucide="x"></i></button></div>'
+    +'<div class="drawer-b">'+Array(3).fill('<div class="skel" style="height:120px;border-radius:14px"></div>').join('')+'</div>';
+  icon();
+  let host;
+  try{ host=await api('/api/host/'+encodeURIComponent(name)); }
+  catch(err){ if(err&&err.auth){ closeDrawer(); showGate('Session expired'); return; } d.querySelector('.drawer-b').innerHTML='<div class="empty"><h3>Failed to load</h3><p>'+esc(String(err))+'</p></div>'; return; }
+  renderHostDetail(host);
+}
+function closeDrawer(){
+  document.getElementById('drawer').classList.remove('show');
+  document.getElementById('scrim').classList.remove('show');
+  Object.keys(charts).forEach(k=>{ if(k.startsWith('h_')){ try{charts[k].destroy()}catch(e){} delete charts[k]; } });
+}
+function renderHostDetail(host){
+  const d=document.getElementById('drawer');
+  const score=healthScore(host.probes), col=scoreColor(score);
+  const C=2*Math.PI*26, off=C*(1-score/100);
+  let h='<div class="drawer-h">'
+    +'<div class="srv-ring" style="width:60px;height:60px;flex:0 0 60px"><svg width="60" height="60"><circle cx="30" cy="30" r="26" fill="none" stroke="rgba(148,163,184,.12)" stroke-width="5"/>'
+    +'<circle cx="30" cy="30" r="26" fill="none" stroke="'+col+'" stroke-width="5" stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+off+'"/></svg>'
+    +'<div class="score" style="font-size:16px;color:'+col+'">'+score+'</div></div>'
+    +'<div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:800;display:flex;align-items:center;gap:9px">'+esc(host.hostname)
+    +'<span class="role-tag tag-'+host.role+'">'+host.role+'</span></div>'
+    +'<div style="color:var(--muted);font-size:13px;margin-top:3px">'+ROLE_NAME[host.role]+' · updated '+ago(host.last_seen)+'</div></div>'
+    +'<button class="icon-btn" onclick="closeDrawer()" aria-label="Close"><i data-lucide="x"></i></button></div>';
+
+  h+='<div class="drawer-b">';
+  // meta block
+  h+='<div class="det-block"><h4><i data-lucide="info" style="width:14px;height:14px"></i>Host</h4>'
+    +'<div class="kv"><span class="k">IP address</span><span class="v" style="display:flex;align-items:center;gap:8px">'+esc(host.ip)
+    +'<button class="icon-btn" style="width:26px;height:26px" title="Copy IP" onclick="copy(\''+esc(host.ip)+'\',this)"><i data-lucide="copy" style="width:13px;height:13px"></i></button></span></div>'
+    +'<div class="kv"><span class="k">Role</span><span class="v">'+ROLE_NAME[host.role]+' ('+host.role+')</span></div>'
+    +'<div class="kv"><span class="k">Overall status</span><span class="v" style="color:'+col+';text-transform:capitalize">'+host.status+'</span></div>'
+    +'<div class="kv"><span class="k">Health score</span><span class="v" style="color:'+col+'">'+score+' / 100</span></div>'
+    +'<div class="kv"><span class="k">Last probe</span><span class="v">'+ago(host.last_seen)+'</span></div></div>';
+
+  // probes block
+  h+='<div class="det-block"><h4><i data-lucide="activity" style="width:14px;height:14px"></i>Probes</h4>';
+  for(const p of host.probes){
+    h+='<div class="kv"><span class="k" style="display:flex;align-items:center;gap:9px"><span class="pdot d-'+p.status+'"></span>'+(PROBE_LABEL[p.name]||p.name)+'</span>'
+      +'<span class="v">'+esc(p.value||'—')+'</span></div>';
+  }
+  h+='</div>';
+
+  // history charts for numeric probes
+  const hist=host.history||{};
+  for(const pname in NUMERIC_PROBE){
+    if(!hist[pname]||!hist[pname].length) continue;
+    h+='<div class="det-block"><h4><i data-lucide="trending-up" style="width:14px;height:14px"></i>'+(PROBE_LABEL[pname]||pname)+' — last '+hist[pname].length+' sweeps</h4>'
+      +'<div id="h_'+pname+'" class="chart-wrap" style="height:150px"></div></div>';
+  }
+  h+='</div>';
+  d.innerHTML=h; icon();
+  // draw charts after DOM
+  setTimeout(()=>{ for(const pname in NUMERIC_PROBE){ if(hist[pname]&&hist[pname].length) drawHistory(pname,hist[pname],host.role); } },20);
+}
+function drawHistory(pname,rows,role){
+  const el=document.getElementById('h_'+pname); if(!el||!window.ApexCharts) return;
+  const pts=rows.slice().reverse().map(r=>{ const n=parseFloat(String(r.value).replace('%','')); return isNaN(n)?0:n; });
+  const isPct=pname==='root_disk';
+  const opt={chart:{type:'area',height:150,toolbar:{show:false},fontFamily:'Inter',animations:{easing:'easeinout'}},
+    series:[{name:PROBE_LABEL[pname]||pname,data:pts}],
+    xaxis:{labels:{show:false},axisBorder:{show:false},axisTicks:{show:false}},
+    yaxis:{labels:{style:{colors:'#94A3B8'},formatter:v=>isPct?Math.round(v)+'%':v.toFixed(1)},min:0,max:isPct?100:undefined},
+    grid:{borderColor:'rgba(148,163,184,.08)',strokeDashArray:4},
+    stroke:{curve:'smooth',width:2.5},dataLabels:{enabled:false},
+    fill:{type:'gradient',gradient:{opacityFrom:.35,opacityTo:0}},
+    tooltip:{theme:'dark'},colors:[isPct?'#38BDF8':'#4F7CFF']};
+  charts['h_'+pname]=new ApexCharts(el,opt); charts['h_'+pname].render();
+}
+function copy(txt,btn){
+  navigator.clipboard.writeText(txt).then(()=>{ toast('ok','Copied','"'+txt+'" is on your clipboard'); });
+}
+
+/* ══════════════════════════ COMMAND PALETTE ══════════════════════════ */
+let cmdSel=0, cmdItems=[];
+function openCmd(){ document.getElementById('cmdk').classList.add('show'); const i=document.getElementById('cmdInput'); i.value=''; renderCmd(); setTimeout(()=>i.focus(),40); }
+function closeCmd(){ document.getElementById('cmdk').classList.remove('show'); }
+function buildCmds(q){
+  q=q.trim().toLowerCase();
+  const nav=[['overview','layout-dashboard','Overview','Fleet summary'],['servers','server','Servers','All hosts'],
+    ['topology','network','Topology','Fleet map']];
+  let groups=[];
+  const navItems=nav.filter(n=>!q||n[2].toLowerCase().includes(q)).map(n=>({icon:n[1],t:n[2],s:n[3],run:()=>go(n[0])}));
+  if(navItems.length) groups.push(['Navigate',navItems]);
+  if(FLEET){
+    const hs=FLEET.hosts.filter(h=>!q||h.hostname.toLowerCase().includes(q)||h.ip.includes(q)).slice(0,8)
+      .map(h=>({icon:'server',t:h.hostname,s:h.ip+' · '+h.role+' · '+h.status,run:()=>{ closeCmd(); openHost(h.hostname); }}));
+    if(hs.length) groups.push(['Servers',hs]);
+  }
+  const actions=[{icon:'refresh-cw',t:'Refresh now',s:'Re-poll the control plane',run:()=>{ closeCmd(); manualRefresh(); }},
+    {icon:'lock',t:'Lock dashboard',s:'Clear token & sign out',run:()=>logout()}].filter(a=>!q||a.t.toLowerCase().includes(q));
+  if(actions.length) groups.push(['Actions',actions]);
+  return groups;
+}
+function renderCmd(){
+  const q=document.getElementById('cmdInput').value;
+  const groups=buildCmds(q); cmdItems=[]; let h='';
+  for(const [name,items] of groups){
+    h+='<div class="cmd-grp">'+name+'</div>';
+    for(const it of items){ const idx=cmdItems.length; cmdItems.push(it);
+      h+='<div class="cmd-row'+(idx===cmdSel?' sel':'')+'" data-i="'+idx+'" onmouseenter="cmdSel='+idx+';markCmd()" onclick="cmdItems['+idx+'].run()">'
+        +'<div class="ci"><i data-lucide="'+it.icon+'"></i></div><div class="cl"><div class="t">'+esc(it.t)+'</div><div class="s">'+esc(it.s)+'</div></div></div>';
+    }
+  }
+  if(!cmdItems.length) h='<div class="empty" style="min-height:160px;padding:32px"><p>No results</p></div>';
+  document.getElementById('cmdList').innerHTML=h; if(cmdSel>=cmdItems.length)cmdSel=0; icon();
+}
+function markCmd(){ document.querySelectorAll('.cmd-row').forEach(r=>r.classList.toggle('sel',+r.dataset.i===cmdSel)); }
+function cmdKey(e){
+  if(e.key==='ArrowDown'){ e.preventDefault(); cmdSel=Math.min(cmdItems.length-1,cmdSel+1); markCmd(); scrollSel(); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); cmdSel=Math.max(0,cmdSel-1); markCmd(); scrollSel(); }
+  else if(e.key==='Enter'){ e.preventDefault(); if(cmdItems[cmdSel]) cmdItems[cmdSel].run(); }
+  else if(e.key==='Escape'){ closeCmd(); }
+}
+function scrollSel(){ const el=document.querySelector('.cmd-row.sel'); if(el)el.scrollIntoView({block:'nearest'}); }
+
+/* ══════════════════════════ TOASTS ══════════════════════════ */
+function toast(kind,title,sub){
+  const wrap=document.getElementById('toasts');
+  const ic={ok:'check-circle-2',warn:'alert-triangle',crit:'x-circle'}[kind]||'info';
+  const el=document.createElement('div'); el.className='toast t-'+kind;
+  el.innerHTML='<div class="ti"><i data-lucide="'+ic+'"></i></div><div><div class="tt">'+esc(title)+'</div><div class="ts">'+esc(sub)+'</div></div>';
+  wrap.appendChild(el); icon();
+  setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(),300); }, 5200);
+}
+
+/* ══════════════════════════ REFRESH LOOP ══════════════════════════ */
+async function manualRefresh(btn){
+  if(btn){ const i=btn.querySelector('svg'); if(i)i.style.animation='spin .7s linear'; }
+  await refresh(true);
+  if(btn){ const i=btn.querySelector('svg'); if(i)setTimeout(()=>i.style.animation='',700); }
+}
+function detectTransitions(hosts){
+  if(!Object.keys(PREV_STATUS).length){ hosts.forEach(h=>PREV_STATUS[h.hostname]=h.status); return; }
+  for(const h of hosts){
+    const prev=PREV_STATUS[h.hostname];
+    if(prev && prev!==h.status){
+      if(h.status==='crit') toast('crit',h.hostname+' went critical',ROLE_NAME[h.role]+' · was '+prev);
+      else if(h.status==='ok' && (prev==='crit'||prev==='warn')) toast('ok',h.hostname+' recovered',ROLE_NAME[h.role]+' · now healthy');
+      else if(h.status==='warn' && prev==='ok') toast('warn',h.hostname+' degraded',ROLE_NAME[h.role]+' · now warning');
+    }
+    PREV_STATUS[h.hostname]=h.status;
+  }
+}
+async function refresh(force){
+  try{
+    const [st,data]=await Promise.all([api('/api/status'),api('/api/fleet')]);
+    STATUS=st; FLEET=data;
+    // health series point
+    const pct=data.totals.hosts?Math.round(data.totals.ok/data.totals.hosts*100):0;
+    const now=new Date().toLocaleTimeString('en-GB');
+    if(!HEALTH_SERIES.length||HEALTH_SERIES[HEALTH_SERIES.length-1].t!==now) HEALTH_SERIES.push({t:now,v:data.totals.ok});
+    if(HEALTH_SERIES.length>60) HEALTH_SERIES.shift();
+    // notif badge
+    const alerts=data.totals.crit+data.totals.warn;
+    const b=document.getElementById('notifBadge');
+    if(alerts){ b.textContent=alerts; b.classList.remove('hidden'); } else b.classList.add('hidden');
+    if(!firstPaint) detectTransitions(data.hosts); else { data.hosts.forEach(h=>PREV_STATUS[h.hostname]=h.status); }
+    if(firstPaint || force){ render(); firstPaint=false; }
+    else if(VIEW==='overview'){ paintOverviewCounts(); }
+    else if(VIEW==='servers'){ paintServers(); }
+    else if(VIEW==='topology'){ drawTopology(); }
+  }catch(err){
+    if(err&&err.auth){ if(refreshTimer)clearInterval(refreshTimer); refreshTimer=null; showGate(TOKEN?'Session expired':''); }
   }
 }
 
-async function openHost(name){
-  const h = (LAST.hosts||[]).find(x=>x.hostname===name); if(!h) return;
-  document.getElementById("drawerName").textContent = h.hostname;
-  document.getElementById("drawerIp").textContent = h.ip+" · "+ROLE_LABEL[h.role];
-  const dot = document.getElementById("drawerDot");
-  dot.style.background = `var(--${h.status})`; dot.style.boxShadow = `var(--glow) var(--${h.status})`;
-  document.getElementById("drawerBody").innerHTML = h.probes.map(p=>
-    `<div class="prow"><div><div class="pn">${p.name}</div></div>
-     <span class="pv">${p.value||"—"}</span>
-     <span class="badge ${p.status}">${p.status}</span></div>`).join("");
-  document.getElementById("drawer").classList.add("open");
-}
-function closeDrawer(){ document.getElementById("drawer").classList.remove("open"); }
-
+/* ══════════════════════════ BOOT ══════════════════════════ */
 function boot(){
-  document.getElementById("roles").innerHTML =
-    `<div class="role"><div class="body">${'<div class="skel"></div>'.repeat(4)}</div></div>`.repeat(3);
-  refresh();
-  clearInterval(timer); timer = setInterval(refresh, 10000);  // stale-while-revalidate
+  document.getElementById('app').classList.remove('hidden');
+  startClock(); icon();
+  render();                       // shows skeletons until first data
+  refresh(true);
+  if(!refreshTimer) refreshTimer=setInterval(()=>refresh(false),10000);
 }
+// global hotkeys
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); document.getElementById('app').classList.contains('hidden')||openCmd(); }
+  else if(e.key==='Escape'){ closeCmd(); closeDrawer(); }
+});
+// init
+window.addEventListener('load',()=>{
+  icon();
+  if(!TOKEN){ showGate(''); return; }
+  api('/api/status').then(()=>boot()).catch(err=>{ if(err&&err.auth) showGate(TOKEN?'Invalid token':''); else showGate('Connection error'); });
+});
 
-// first load: try without token; if 401, show gate
-(async function(){
-  try{ await api("/api/status"); boot(); }
-  catch(e){ if(e&&e.auth) showGate(); else boot(); }
-})();
 </script>
 </body>
 </html>
