@@ -11,10 +11,10 @@ import asyncio
 import os
 import time
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Body, Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import __version__, db, prober
+from . import __version__, db, governor, prober, remediator
 from .config import settings
 from .inventory import load_hosts
 from .probes import probes_for, roll_up
@@ -58,6 +58,7 @@ async def status():
         "last_sweep": st.get("last_sweep", 0),
         "sweep_ms": st.get("sweep_ms", 0),
         "incidents": st.get("incidents", 0),
+        "governor": governor.status(),
     }
 
 
@@ -150,10 +151,48 @@ async def incidents():
     return {
         "count": len(out),
         "remediation_enabled": settings.remediation_enabled,
-        "phase": "advisor",
+        "phase": "autoheal" if settings.remediation_enabled else "advisor",
+        "governor": governor.status(),
         "incidents": out,
         "ts": int(time.time()),
     }
+
+
+@app.post("/api/incidents/{incident_id}/approve", dependencies=[Depends(require_token)])
+async def approve(incident_id: int, body: dict = Body(default={})):
+    """Human-approved remediation (Phase 3). Governed, gated, audited.
+
+    Default-deny: returns 403 unless PULSE_REMEDIATION_ENABLED is on, the
+    blast-radius cap has headroom, and destructive fixes are explicitly
+    confirmed. On ALLOW, runs the vetted playbook once with verify-or-rollback.
+    """
+    inc = db.get_incident(incident_id)
+    if not inc or inc["status"] == "resolved":
+        raise HTTPException(status_code=404, detail="unknown or already-resolved incident")
+
+    books = {b.id: b for b in load_playbooks()}
+    pb = books.get(inc["kind"])
+    if pb is None:
+        # needs-human incidents have no vetted fix — nothing to approve.
+        raise HTTPException(status_code=422, detail="no vetted playbook for this incident (needs human triage)")
+
+    approver = str(body.get("approver") or "operator")[:64]
+    confirmed = bool(body.get("confirm_destructive", False))
+
+    decision = governor.check(pb, autonomous=False, destructive_confirmed=confirmed)
+    if not decision.allowed:
+        db.audit(approver, "remediate_denied", target=inc["host_id"],
+                 detail={"incident": incident_id, "playbook": pb.id, "reason": decision.reason})
+        raise HTTPException(status_code=403, detail=decision.reason)
+
+    host = remediator.host_by_name(inc["host_id"])
+    if host is None:
+        raise HTTPException(status_code=404, detail="host not in current inventory")
+    if not host.has_credentials:
+        raise HTTPException(status_code=409, detail="no SSH credentials for this host")
+
+    result = await remediator.execute(inc, pb, host, approver)
+    return {"incident": incident_id, "playbook": pb.id, "host": inc["host_id"], **result}
 
 
 # ── dashboard ────────────────────────────────────────────────────────────

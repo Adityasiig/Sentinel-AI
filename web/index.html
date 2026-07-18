@@ -303,7 +303,13 @@ button{font-family:inherit}
 .inc-fix{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:rgba(7,11,20,.5)}
 .fix-head{display:flex;align-items:center;gap:10px;padding:9px 13px;border-bottom:1px solid var(--line);font-size:11.5px;font-weight:700;color:var(--muted)}
 .fix-head .fh-t{display:inline-flex;align-items:center;gap:7px;color:var(--text)}
-.fix-head .btn{margin-left:auto}
+.fix-head .fh-actions{margin-left:auto;display:flex;gap:8px}
+.btn.danger{background:linear-gradient(135deg,var(--crit),#c92a45);border-color:transparent;color:#fff}
+.btn.danger:hover{box-shadow:0 12px 40px -12px rgba(244,63,94,.6)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.gov-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px}
+.gov-on{color:var(--ok);background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25)}
+.gov-off{color:var(--muted);background:rgba(100,116,139,.1);border:1px solid var(--line)}
 .inc-fix pre{margin:0;padding:13px 15px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;line-height:1.6;color:#cbd5e1;white-space:pre-wrap;word-break:break-word}
 .fix-verify{padding:8px 15px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
 .inc-nofix{margin-top:13px;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--unknown);background:rgba(100,116,139,.07);border:1px dashed rgba(100,116,139,.3);border-radius:11px;padding:11px 14px}
@@ -681,6 +687,30 @@ function copyEl(id,btn){
   const el=document.getElementById(id); if(!el) return;
   navigator.clipboard.writeText(el.textContent).then(()=>toast('ok','Command copied','Paste into your SSH session on the target host'));
 }
+async function apiPost(path,body){
+  const r=await fetch(path,{method:'POST',headers:{...hdrs(),'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  if(r.status===401) throw {auth:true};
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(data.detail||('http '+r.status));
+  return data;
+}
+async function approveIncident(id,destructive,host,btn){
+  const msg = destructive
+    ? 'DESTRUCTIVE remediation on '+host+'.\n\nThis playbook makes changes that may need rollback. Pulse will run it once, verify, and auto-rollback on failure.\n\nApprove and run now?'
+    : 'Run the vetted fix on '+host+'?\n\nPulse will execute it once, then verify and auto-rollback on failure.';
+  if(!confirm(msg)) return;
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin" style="width:13px;height:13px"></span>Running…'; }
+  try{
+    const r=await apiPost('/api/incidents/'+id+'/approve',{approver:'dashboard',confirm_destructive:!!destructive});
+    if(r.result==='success') toast('ok',host+' remediated','Verified '+(r.verify&&r.verify.probe||'')+' → '+(r.after&&r.after.status||'ok'));
+    else if(r.result==='rolled_back') toast('warn','Fix failed — rolled back',host+' · verify did not pass, changes reverted');
+    else toast('crit','Remediation failed',host+' · '+(r.error||'verify did not pass'));
+  }catch(err){
+    if(err&&err.auth){ showGate('Session expired'); return; }
+    toast('crit','Denied',String(err.message||err));
+  }
+  await refresh(true);
+}
 function renderIncidents(){
   let h='<div class="view"><div class="page-head"><div><h1>Incidents</h1>'
     +'<p>Advisor — known failures matched to a vetted fix · read-only</p></div>'
@@ -688,11 +718,15 @@ function renderIncidents(){
 
   if(!INCIDENTS){ return h+skelGrid(3,'')+'</div>'; }
 
-  // advisor-mode explainer (why nothing auto-runs)
-  h+='<div class="adv-note"><div class="an-ico"><i data-lucide="shield-check"></i></div>'
-    +'<div><b>Advisor mode — Pulse recommends, it does not execute.</b>'
-    +'<p>Each incident carries the exact vetted fix. Run it yourself on the host, or wait for Phase&nbsp;3 (governed auto-heal). Remediation is currently '
-    +'<b style="color:var(--'+(INCIDENTS.remediation_enabled?'ok':'crit')+')">'+(INCIDENTS.remediation_enabled?'ENABLED':'DISABLED')+'</b>.</p></div></div>';
+  // governor / mode explainer
+  const g=INCIDENTS.governor||{}, armed=INCIDENTS.remediation_enabled;
+  h+='<div class="adv-note"><div class="an-ico"><i data-lucide="'+(armed?'zap':'shield-check')+'"></i></div>'
+    +'<div><b>'+(armed?'Auto-heal armed — governed remediation is live.':'Advisor mode — Pulse recommends, it does not execute.')+'</b>'
+    +'<p>'+(armed
+        ?'Approve a fix to run it once behind the governor — verify-or-rollback, full audit, blast-radius '+(g.recent_executions||0)+'/'+(g.blast_radius||0)+' in the last '+Math.round((g.blast_window||0)/60)+'m.'
+        :'Each incident carries the exact vetted fix — copy and run it on the host, or set PULSE_REMEDIATION_ENABLED to approve fixes from here (Phase 3, governed).')
+    +'</p></div>'
+    +'<span class="gov-pill '+(armed?'gov-on':'gov-off')+'" style="margin-left:auto;flex:0 0 auto"><i data-lucide="'+(armed?'check-circle-2':'lock')+'" style="width:12px;height:12px"></i>Remediation '+(armed?'ENABLED':'DISABLED')+'</span></div>';
 
   const list=INCIDENTS.incidents||[];
   if(!list.length){
@@ -721,8 +755,17 @@ function renderIncidents(){
 
     if(a.command){
       const cid='inc-cmd-'+inc.id;
+      let acts='<div class="fh-actions">';
+      if(INCIDENTS.remediation_enabled){
+        const cls=a.destructive?'btn sm danger':'btn sm primary';
+        acts+='<button class="'+cls+'" onclick="approveIncident('+inc.id+','+(a.destructive?1:0)+',\''+esc(inc.hostname)+'\',this)">'
+          +'<i data-lucide="play"></i>Approve &amp; run</button>';
+      } else {
+        acts+='<span class="gov-pill gov-off" title="Set PULSE_REMEDIATION_ENABLED to approve from here"><i data-lucide="lock" style="width:12px;height:12px"></i>gated</span>';
+      }
+      acts+='<button class="btn sm" onclick="copyEl(\''+cid+'\',this)"><i data-lucide="copy"></i>Copy</button></div>';
       h+='<div class="inc-fix"><div class="fix-head"><span class="fh-t"><i data-lucide="wrench" style="width:13px;height:13px"></i>Recommended fix</span>'
-        +'<button class="btn sm" onclick="copyEl(\''+cid+'\',this)"><i data-lucide="copy"></i>Copy</button></div>'
+        +acts+'</div>'
         +'<pre id="'+cid+'">'+esc(a.command)+'</pre>';
       if(a.verify&&a.verify.probe) h+='<div class="fix-verify"><i data-lucide="check-check" style="width:12px;height:12px"></i>Verify: probe <b style="color:var(--text)">&nbsp;'+esc(a.verify.probe)+'</b>&nbsp; expected <b style="color:var(--ok)">'+esc(a.verify.expect)+'</b></div>';
       h+='</div>';

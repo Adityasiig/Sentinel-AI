@@ -197,6 +197,58 @@ def open_incidents() -> list[dict]:
     return [_row(r) for r in rows]
 
 
+def get_incident(incident_id: int) -> dict | None:
+    r = conn().execute(
+        "SELECT i.id, i.host_id, i.kind, i.status, i.opened_ts, h.ip, h.role "
+        "FROM incidents i JOIN hosts h ON h.id = i.host_id WHERE i.id=?",
+        (incident_id,),
+    ).fetchone()
+    return _row(r) if r else None
+
+
+def set_incident_status(incident_id: int, status: str) -> None:
+    closed = time.time() if status == "resolved" else None
+    with tx() as c:
+        c.execute("UPDATE incidents SET status=?, closed_ts=? WHERE id=?",
+                  (status, closed, incident_id))
+
+
+# ── remediation execution (Phase 3) ──────────────────────────────────────
+def count_recent_executions(window_s: int) -> int:
+    """Real (non-dry-run) remediations run within the last `window_s` seconds.
+
+    Feeds the governor's blast-radius cap so a storm of fixes can't run at once.
+    """
+    since = time.time() - window_s
+    r = conn().execute(
+        "SELECT COUNT(*) AS n FROM actions WHERE dry_run=0 AND ts>=?",
+        (since,),
+    ).fetchone()
+    return int(r["n"]) if r else 0
+
+
+def record_execution(incident_id: int, playbook_id: str, cmd: str, destructive: bool,
+                     approver: str, result: str, before: str = "", after: str = "") -> int:
+    with tx() as c:
+        cur = c.execute(
+            "INSERT INTO actions (incident_id, playbook, cmd, destructive, dry_run, "
+            "approved_by, result, before, after, ts) VALUES (?,?,?,?,0,?,?,?,?,?)",
+            (incident_id, playbook_id, cmd, 1 if destructive else 0,
+             approver, result, before, after, time.time()),
+        )
+        return cur.lastrowid
+
+
+def recent_actions(limit: int = 50) -> list[dict]:
+    rows = conn().execute(
+        "SELECT a.id, a.incident_id, a.playbook, a.destructive, a.dry_run, a.approved_by, "
+        "a.result, a.ts, i.host_id FROM actions a LEFT JOIN incidents i ON i.id=a.incident_id "
+        "WHERE a.dry_run=0 ORDER BY a.ts DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [_row(r) for r in rows]
+
+
 # ── reads ────────────────────────────────────────────────────────────────
 def _row(r: sqlite3.Row) -> dict[str, Any]:
     return {k: r[k] for k in r.keys()}

@@ -28,10 +28,11 @@ class HostSession:
     def __init__(self, conn: asyncssh.SSHClientConnection):
         self._conn = conn
 
-    async def run(self, command: str) -> CommandResult:
+    async def run(self, command: str, timeout: int | None = None) -> CommandResult:
         try:
             r = await asyncio.wait_for(
-                self._conn.run(command, check=False), timeout=settings.ssh_timeout
+                self._conn.run(command, check=False),
+                timeout=timeout or settings.ssh_timeout,
             )
             return CommandResult(ok=(r.exit_status == 0),
                                  stdout=(r.stdout or "").strip(),

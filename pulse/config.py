@@ -33,8 +33,16 @@ class Settings:
     probe_interval: int = _int("PULSE_PROBE_INTERVAL", 60)      # seconds between sweeps
     ssh_concurrency: int = _int("PULSE_SSH_CONCURRENCY", 20)    # max parallel SSH sessions; 20 sweeps the 82-box fleet in ~12s (measured) vs ~22s at 10
     ssh_timeout: int = _int("PULSE_SSH_TIMEOUT", 12)            # per-host connect+run budget
-    # Read-only until explicitly flipped. Phase 1 keeps this False, hard.
+    # Read-only until explicitly flipped. Phases 1–2 keep this False, hard.
     remediation_enabled: bool = os.environ.get("PULSE_REMEDIATION_ENABLED", "").lower() in ("1", "true", "yes")
+
+    # ── remediation governor (Phase 3) ───────────────────────────────────
+    remediation_timeout: int = _int("PULSE_REMEDIATION_TIMEOUT", 120)  # per-step run budget (restarts are slow)
+    blast_radius: int = _int("PULSE_BLAST_RADIUS", 3)          # max executions allowed per window
+    blast_window: int = _int("PULSE_BLAST_WINDOW", 600)        # window length in seconds (default 10 min)
+    # Autonomous auto-heal (no human click). OFF by default: even auto_approve
+    # playbooks require a manual approval until this is explicitly enabled.
+    autoheal_enabled: bool = os.environ.get("PULSE_AUTOHEAL", "").lower() in ("1", "true", "yes")
 
     # ── credentials (injected; never committed) ──────────────────────────
     # Per-role SSH users + shared passwords for IVG/OPS, per-box JSON for VOSS.
