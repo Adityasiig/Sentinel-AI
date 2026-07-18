@@ -54,7 +54,14 @@ def _connect_kwargs(host: Host) -> dict:
     if key:
         kwargs["client_keys"] = [asyncssh.import_private_key(key)]
     else:
+        # Password auth only. Without this, asyncssh first offers any local
+        # agent/default identity keys; on a locked-down sshd that exhausts
+        # MaxAuthTries ("Too many authentication failures") before it ever
+        # reaches the password. Disable key + agent auth so we go straight to it.
         kwargs["password"] = host.ssh_password
+        kwargs["client_keys"] = None
+        kwargs["agent_path"] = None
+        kwargs["preferred_auth"] = ("keyboard-interactive", "password")
     return kwargs
 
 
