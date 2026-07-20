@@ -69,8 +69,8 @@ def _request(system: str, prompt: str, stream: bool) -> urllib.request.Request:
         "stream": stream,
         # keep the model resident so we never eat a cold-load spike mid-answer
         "keep_alive": -1,
-        # cap output so a CPU model can't ramble for ten minutes on one answer
-        "options": {"temperature": 0.2, "num_predict": 400},
+        # cap output so a full CPU answer lands in ~40-50s, not minutes
+        "options": {"temperature": 0.2, "num_predict": 180},
     }).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     if settings.llm_token:
