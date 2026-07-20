@@ -321,6 +321,25 @@ button{font-family:inherit}
 .mini-h svg{width:15px;height:15px}
 .ch-pill{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 13px;border-radius:9px;background:var(--card-hover);border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--text)}
 .ch-dot{width:8px;height:8px;border-radius:50%}
+/* ── Logs ── */
+.log-card{padding:16px}
+.log-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.log-sel,.log-search{height:38px;border-radius:10px;background:var(--card-hover);border:1px solid var(--line);color:var(--text);font-size:13px;padding:0 12px;font-family:var(--ff);outline:none;transition:.16s}
+.log-sel{min-width:230px;cursor:pointer}.log-sel.sm{min-width:120px}
+.log-search{flex:1;min-width:180px}
+.log-sel:focus,.log-search:focus{border-color:rgba(79,124,255,.5)}
+.log-pane{background:#0a0e17;border:1px solid var(--line);border-radius:12px;padding:10px 0;max-height:62vh;overflow:auto;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.55}
+.log-meta{position:sticky;top:0;background:#0a0e17;padding:4px 14px 8px;color:var(--muted);font-size:11.5px;border-bottom:1px solid var(--line);margin-bottom:4px;z-index:1}
+.log-hint{display:flex;align-items:center;justify-content:center;gap:6px;color:var(--muted);padding:44px 16px;font-family:var(--ff);font-size:13.5px}
+.log-hint svg{width:16px;height:16px}
+.log-line{display:flex;gap:12px;padding:1px 14px;white-space:pre-wrap;word-break:break-word;border-left:2px solid transparent}
+.log-line:hover{background:rgba(148,163,184,.05)}
+.log-line .ln{color:#3b4657;flex:0 0 42px;text-align:right;user-select:none}
+.log-line .lt{flex:1;color:#c3cad6}
+.lv-crit{border-left-color:var(--crit);background:rgba(244,63,94,.06)}.lv-crit .lt{color:#ff9db0}
+.lv-err{border-left-color:var(--crit)}.lv-err .lt{color:#ff8fa4}
+.lv-warn{border-left-color:var(--warn)}.lv-warn .lt{color:#f4d774}
+.lv-notice .lt{color:#8fd3f4}
 /* ── AI Copilot ── */
 .ai-card{padding:20px}
 .ai-model{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
@@ -385,7 +404,7 @@ button{font-family:inherit}
       <div class="nav-item" data-view="topology" onclick="go('topology')"><i data-lucide="network"></i><span class="txt">Topology</span></div>
       <div class="side-label">Operations</div>
       <div class="nav-item" data-view="incidents" onclick="go('incidents')"><i data-lucide="siren"></i><span class="txt">Incidents</span><span class="navcount hidden" id="incCount">0</span></div>
-      <div class="nav-item" data-view="logs" onclick="go('logs')"><i data-lucide="scroll-text"></i><span class="txt">Logs</span><span class="soon">SOON</span></div>
+      <div class="nav-item" data-view="logs" onclick="go('logs')"><i data-lucide="scroll-text"></i><span class="txt">Logs</span></div>
       <div class="nav-item" data-view="calls" onclick="go('calls')"><i data-lucide="phone-call"></i><span class="txt">Calls</span><span class="soon">SOON</span></div>
       <div class="nav-item" data-view="routes" onclick="go('routes')"><i data-lucide="route"></i><span class="txt">Routes</span><span class="soon">SOON</span></div>
       <div class="side-label">Intelligence</div>
@@ -419,6 +438,8 @@ let FLEET = null;              // last /api/fleet payload
 let STATUS = null;             // last /api/status payload
 let INCIDENTS = null;          // last /api/incidents payload (advisor feed)
 let VIEW = 'overview';
+let LOG_HOST = '';             // last host tailed in the Logs view
+let LOG_BUSY = false;          // guard against overlapping log fetches
 let PREV_STATUS = {};          // hostname -> status (for transition toasts)
 let HEALTH_SERIES = [];        // rolling fleet health % for the overview sparkline
 let SRV_FILTER = {role:'all', status:'all', q:''};
@@ -518,6 +539,7 @@ function render(){
   else if(VIEW==='servers')  m.innerHTML=renderServers();
   else if(VIEW==='topology') { m.innerHTML=renderTopologyShell(); drawTopology(); }
   else if(VIEW==='incidents')m.innerHTML=renderIncidents();
+  else if(VIEW==='logs')     m.innerHTML=renderLogs();
   else if(VIEW==='ai')       m.innerHTML=renderCopilot();
   else if(VIEW==='alerts')   m.innerHTML=renderAlerts();
   else                       m.innerHTML=renderEmpty(VIEW);
@@ -696,6 +718,51 @@ function drawTopology(){
   box.innerHTML=svg;
 }
 
+/* ══════════════════════════ LOGS (live tail) ══════════════════════════ */
+function renderLogs(){
+  if(!FLEET||!FLEET.hosts||!FLEET.hosts.length){
+    return '<div class="view"><div class="page-head"><div><h1>Unified logs</h1><p>Live tail from any fleet box · read-only</p></div></div>'
+      +'<div class="card"><div class="empty"><div class="ill"><i data-lucide="scroll-text"></i></div><h3>Fleet not loaded yet</h3><p>Waiting for the control plane to report hosts.</p></div></div></div>';
+  }
+  const order=['IVG','OPS','VOSS'];
+  const byRole={}; FLEET.hosts.forEach(h=>{(byRole[h.role]=byRole[h.role]||[]).push(h);});
+  let opts='<option value="">Select a host…</option>';
+  order.forEach(r=>{ if(!byRole[r])return; opts+='<option disabled>── '+ROLE_NAME[r]+' ──</option>';
+    byRole[r].slice().sort((a,b)=>a.hostname.localeCompare(b.hostname)).forEach(h=>{
+      opts+='<option value="'+esc(h.hostname)+'"'+(h.hostname===LOG_HOST?' selected':'')+'>'+esc(h.hostname)+' · '+esc(h.ip)+'</option>'; }); });
+  let h='<div class="view"><div class="page-head"><div><h1>Unified logs</h1>'
+    +'<p>Live tail from any FreeSWITCH, OpenSIPS or VOS3000 box · read-only, nothing stored</p></div></div>';
+  h+='<div class="card log-card"><div class="log-bar">'
+    +'<select class="log-sel" id="log-host" onchange="loadLogs()">'+opts+'</select>'
+    +'<select class="log-sel sm" id="log-lines" onchange="loadLogs()">'
+      +[200,500,1000,2000].map(n=>'<option value="'+n+'"'+(n===500?' selected':'')+'>'+n+' lines</option>').join('')+'</select>'
+    +'<input class="log-search" id="log-grep" placeholder="filter (substring)…" onkeydown="if(event.key===\'Enter\')loadLogs()">'
+    +'<button class="btn" id="log-go" onclick="loadLogs()"><i data-lucide="refresh-cw"></i>Fetch</button></div>'
+    +'<div class="log-pane" id="log-pane"><div class="log-hint"><i data-lucide="terminal"></i>&nbsp; Pick a host to tail its live log.</div></div>'
+    +'</div></div>';
+  return h;
+}
+async function loadLogs(){
+  const hs=document.getElementById('log-host'); if(!hs) return;
+  const host=hs.value, lines=document.getElementById('log-lines').value, grep=document.getElementById('log-grep').value.trim();
+  LOG_HOST=host;
+  const pane=document.getElementById('log-pane');
+  if(!host){ pane.innerHTML='<div class="log-hint"><i data-lucide="terminal"></i>&nbsp; Pick a host to tail its live log.</div>'; icon(); return; }
+  if(LOG_BUSY) return; LOG_BUSY=true;
+  const btn=document.getElementById('log-go'), ol=btn.innerHTML; btn.innerHTML='<span class="spin" style="width:14px;height:14px"></span>';
+  pane.innerHTML='<div class="log-hint"><span class="spin"></span>&nbsp; Tailing '+esc(host)+'…</div>'; icon();
+  try{
+    const q='/api/logs/'+encodeURIComponent(host)+'?lines='+encodeURIComponent(lines)+(grep?'&grep='+encodeURIComponent(grep):'');
+    const d=await api(q);
+    if(!d.lines||!d.lines.length){ pane.innerHTML='<div class="log-hint"><i data-lucide="file-x"></i>&nbsp; '+esc(d.note||('No lines'+(grep?' matched "'+grep+'"':'')))+'</div>'; icon(); return; }
+    const rows=d.lines.map(l=>'<div class="log-line lv-'+l.sev+'"><span class="ln">'+l.n+'</span><span class="lt">'+esc(l.text)+'</span></div>').join('');
+    pane.innerHTML='<div class="log-meta">'+d.lines.length+' lines · '+esc(host)+' ('+d.role+')'+(d.truncated?' · truncated to newest':'')+(grep?' · filter “'+esc(grep)+'”':'')+'</div>'+rows;
+    pane.scrollTop=pane.scrollHeight;
+  }catch(err){
+    if(err&&err.auth){ showGate('Session expired'); return; }
+    pane.innerHTML='<div class="log-hint" style="color:var(--crit)"><i data-lucide="alert-triangle"></i>&nbsp; '+esc(String(err.message||err))+'</div>'; icon();
+  }finally{ LOG_BUSY=false; btn.innerHTML=ol; icon(); }
+}
 /* ══════════════════════════ EMPTY (Phase 2) ══════════════════════════ */
 function renderEmpty(v){
   const meta={

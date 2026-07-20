@@ -15,7 +15,7 @@ import time
 from fastapi import Body, Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from . import __build__, __version__, aicontext, db, governor, llm, notifier, prober, remediator
+from . import __build__, __version__, aicontext, db, governor, llm, logs, notifier, prober, remediator
 from .config import settings
 from .inventory import load_hosts
 from .probes import probes_for, roll_up
@@ -200,6 +200,26 @@ async def approve(incident_id: int, body: dict = Body(default={})):
 
     result = await remediator.execute(inc, pb, host, approver)
     return {"incident": incident_id, "playbook": pb.id, "host": inc["host_id"], **result}
+
+
+# ── unified logs (Phase 1, read-only on-demand tail) ─────────────────────
+@app.get("/api/logs/{hostname}", dependencies=[Depends(require_token)])
+async def host_logs(hostname: str, lines: int = logs.LINES_DEFAULT, grep: str = ""):
+    """Tail one host's role log live over SSH. Read-only — nothing is stored.
+
+    404 unknown host · 409 no credentials · 400 bad filter · 502 unreachable.
+    """
+    try:
+        result = await logs.fetch(hostname, lines=lines, grep=grep)
+    except logs.LogError as e:
+        msg = str(e)
+        code = (404 if msg == "unknown host" else
+                409 if msg.startswith("no SSH credentials") else
+                502 if msg.startswith("unreachable") else 400)
+        raise HTTPException(status_code=code, detail=msg)
+    db.audit("operator", "logs_view", target=hostname,
+             detail={"lines": len(result.get("lines", [])), "grep": grep[:80]})
+    return result
 
 
 # ── alerting (Phase 5, read-only notifications) ──────────────────────────
