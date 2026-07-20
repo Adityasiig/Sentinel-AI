@@ -340,6 +340,41 @@ button{font-family:inherit}
 .lv-err{border-left-color:var(--crit)}.lv-err .lt{color:#ff8fa4}
 .lv-warn{border-left-color:var(--warn)}.lv-warn .lt{color:#f4d774}
 .lv-notice .lt{color:#8fd3f4}
+/* ── Live Calls ── */
+.calls-top{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:18px}
+.cbig{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:18px 20px;position:relative;overflow:hidden}
+.cbig .cb-lbl{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:7px}
+.cbig .cb-num{font-size:34px;font-weight:800;letter-spacing:-.02em;margin-top:6px;font-variant-numeric:tabular-nums}
+.cbig .cb-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.cbig.accent{border-color:rgba(52,211,153,.28);background:linear-gradient(180deg,rgba(52,211,153,.06),transparent)}
+.cbig.accent .cb-num{color:#34d399}
+.cbig.blue{border-color:rgba(79,124,255,.25)}.cbig.blue .cb-num{color:var(--accent-2)}
+.calls-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.ccard{border:1px solid var(--line);border-radius:13px;background:var(--card);padding:13px 15px;transition:.16s var(--ease)}
+.ccard:hover{border-color:var(--line-2);transform:translateY(-1px)}
+.ccard .cc-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.ccard .cc-name{font-weight:650;font-size:13.5px}
+.ccard .cc-ip{font-size:11.5px;color:var(--muted)}
+.ccard .cc-num{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1;margin-top:8px}
+.ccard .cc-kind{font-size:10.5px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
+.ccard.dead{opacity:.55}.ccard.dead .cc-num{color:var(--muted)}
+.rolechip{font-size:10px;font-weight:700;letter-spacing:.03em;padding:2px 7px;border-radius:6px;background:rgba(148,163,184,.1);color:var(--muted)}
+/* ── Route Health ── */
+.rt-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.rt-tbl th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card)}
+.rt-tbl td{padding:11px 12px;border-bottom:1px solid rgba(148,163,184,.07);vertical-align:middle}
+.rt-tbl tr:hover td{background:rgba(148,163,184,.04)}
+.rt-name{font-weight:640}
+.rt-ip{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
+.rt-num{font-variant-numeric:tabular-nums}
+.rt-st{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:650;padding:3px 9px;border-radius:999px}
+.rt-active{color:#34d399;background:rgba(52,211,153,.1)}
+.rt-locked{color:#f4d774;background:rgba(244,215,116,.1)}
+.rt-unmapped{color:var(--muted);background:rgba(148,163,184,.1)}
+.rt-asr-good{color:#34d399;font-weight:700}.rt-asr-mid{color:#f4d774;font-weight:700}.rt-asr-bad{color:#ff8fa4;font-weight:700}
+.rt-quiet{color:var(--muted);font-size:12px}
+.rt-sum{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:12.5px;margin:2px 2px 14px}
+.rt-sum b{color:var(--text)}
 /* ── AI Copilot ── */
 .ai-card{padding:20px}
 .ai-model{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
@@ -405,8 +440,8 @@ button{font-family:inherit}
       <div class="side-label">Operations</div>
       <div class="nav-item" data-view="incidents" onclick="go('incidents')"><i data-lucide="siren"></i><span class="txt">Incidents</span><span class="navcount hidden" id="incCount">0</span></div>
       <div class="nav-item" data-view="logs" onclick="go('logs')"><i data-lucide="scroll-text"></i><span class="txt">Logs</span></div>
-      <div class="nav-item" data-view="calls" onclick="go('calls')"><i data-lucide="phone-call"></i><span class="txt">Calls</span><span class="soon">SOON</span></div>
-      <div class="nav-item" data-view="routes" onclick="go('routes')"><i data-lucide="route"></i><span class="txt">Routes</span><span class="soon">SOON</span></div>
+      <div class="nav-item" data-view="calls" onclick="go('calls')"><i data-lucide="phone-call"></i><span class="txt">Calls</span></div>
+      <div class="nav-item" data-view="routes" onclick="go('routes')"><i data-lucide="route"></i><span class="txt">Routes</span></div>
       <div class="side-label">Intelligence</div>
       <div class="nav-item" data-view="ai" onclick="go('ai')"><i data-lucide="sparkles"></i><span class="txt">AI Copilot</span></div>
       <div class="nav-item" data-view="alerts" onclick="go('alerts')"><i data-lucide="bell-ring"></i><span class="txt">Alerts</span></div>
@@ -439,6 +474,9 @@ let STATUS = null;             // last /api/status payload
 let INCIDENTS = null;          // last /api/incidents payload (advisor feed)
 let VIEW = 'overview';
 let LOG_HOST = '';             // last host tailed in the Logs view
+let CALLS_BUSY = false;        // Calls fan-out in flight
+let ROUTE_HOST = '';           // last VOS box opened in the Routes view
+let ROUTE_BUSY = false;        // Routes fetch in flight
 let LOG_BUSY = false;          // guard against overlapping log fetches
 let PREV_STATUS = {};          // hostname -> status (for transition toasts)
 let HEALTH_SERIES = [];        // rolling fleet health % for the overview sparkline
@@ -540,6 +578,8 @@ function render(){
   else if(VIEW==='topology') { m.innerHTML=renderTopologyShell(); drawTopology(); }
   else if(VIEW==='incidents')m.innerHTML=renderIncidents();
   else if(VIEW==='logs')     m.innerHTML=renderLogs();
+  else if(VIEW==='calls')  { m.innerHTML=renderCalls(); loadCalls(); }
+  else if(VIEW==='routes')   m.innerHTML=renderRoutes();
   else if(VIEW==='ai')       m.innerHTML=renderCopilot();
   else if(VIEW==='alerts')   m.innerHTML=renderAlerts();
   else                       m.innerHTML=renderEmpty(VIEW);
@@ -762,6 +802,115 @@ async function loadLogs(){
     if(err&&err.auth){ showGate('Session expired'); return; }
     pane.innerHTML='<div class="log-hint" style="color:var(--crit)"><i data-lucide="alert-triangle"></i>&nbsp; '+esc(String(err.message||err))+'</div>'; icon();
   }finally{ LOG_BUSY=false; btn.innerHTML=ol; icon(); }
+}
+/* ══════════════════════════ LIVE CALLS ══════════════════════════ */
+function cbig(cls,ic,lbl,num,sub){
+  return '<div class="cbig '+cls+'"><div class="cb-lbl"><i data-lucide="'+ic+'"></i>'+lbl+'</div>'
+    +'<div class="cb-num">'+num+'</div><div class="cb-sub">'+sub+'</div></div>';
+}
+function ccard(h){
+  const dead=h.calls==null;
+  const label=h.kind==='concurrent'?'concurrent':(h.kind==='recent5m'?'last 5 min':'—');
+  return '<div class="ccard'+(dead?' dead':'')+'">'
+    +'<div class="cc-h"><span class="cc-name">'+esc(h.hostname)+'</span><span class="rolechip">'+(ROLE_NAME[h.role]||h.role)+'</span></div>'
+    +'<div class="cc-ip">'+esc(h.ip)+'</div>'
+    +'<div class="cc-num">'+(dead?'—':h.calls)+'</div>'
+    +'<div class="cc-kind">'+(dead?esc(h.error||'no contact'):label)+'</div></div>';
+}
+function renderCalls(){
+  return '<div class="view"><div class="page-head"><div><h1>Live calls</h1>'
+    +'<p>Concurrent sessions across the fleet · on-demand fan-out, read-only</p></div>'
+    +'<button class="btn sm" onclick="loadCalls(false,this)"><i data-lucide="refresh-cw"></i>Refresh</button></div>'
+    +'<div class="calls-top" id="calls-top"><div class="cbig"><div class="cb-lbl"><span class="spin"></span>&nbsp;probing fleet…</div></div></div>'
+    +'<div class="calls-grid" id="calls-grid"></div></div>';
+}
+async function loadCalls(silent,btn){
+  const top=document.getElementById('calls-top'), grid=document.getElementById('calls-grid');
+  if(!top||!grid) return;
+  if(CALLS_BUSY) return; CALLS_BUSY=true;
+  if(btn){ var ol=btn.innerHTML; btn.innerHTML='<span class="spin" style="width:14px;height:14px"></span>'; }
+  try{
+    const d=await api('/api/calls');
+    let reporting=0; d.hosts.forEach(h=>{ if(h.calls!=null) reporting++; });
+    top.innerHTML=
+       cbig('accent','phone-call','Concurrent calls',d.totals.concurrent,'FreeSWITCH + OpenSIPS · live')
+      +cbig('blue','activity','VOS 5-min calls',d.totals.voss_recent5m,'VOS3000 recent throughput')
+      +cbig('','server-cog','Reporting',reporting+'/'+d.hosts.length,'hosts answered the probe');
+    const hs=d.hosts.slice().sort((a,b)=>((b.calls==null?-1:b.calls)-(a.calls==null?-1:a.calls)));
+    grid.innerHTML=hs.map(ccard).join('');
+    icon();
+  }catch(err){
+    if(err&&err.auth){ showGate('Session expired'); return; }
+    top.innerHTML='';
+    grid.innerHTML='<div class="log-hint" style="color:var(--crit)"><i data-lucide="alert-triangle"></i>&nbsp; '+esc(String(err.message||err))+'</div>'; icon();
+  }finally{ CALLS_BUSY=false; if(btn) btn.innerHTML=ol; }
+}
+/* ══════════════════════════ ROUTE HEALTH (VOS3000) ══════════════════════════ */
+function rtRow(c){
+  const stCls=c.status==='active'?'rt-active':c.status==='locked'?'rt-locked':'rt-unmapped';
+  const stIco=c.status==='active'?'check-circle-2':c.status==='locked'?'lock':'help-circle';
+  let asr='<span class="rt-quiet">—</span>', acd='<span class="rt-quiet">—</span>', att='<span class="rt-quiet">0</span>';
+  if(c.has_traffic){
+    const a=c.asr==null?0:c.asr;
+    const cls=a>=50?'rt-asr-good':a>=25?'rt-asr-mid':'rt-asr-bad';
+    asr='<span class="'+cls+'">'+a+'%</span>';
+    acd=(c.acd!=null?c.acd+'s':'—');
+    att=c.attempts;
+  }
+  const cap=c.capacity>0?c.capacity:'∞';
+  const prio=(c.priority==null||c.priority>=9999)?'—':c.priority;
+  return '<tr><td class="rt-name">'+esc(c.name)+'</td>'
+    +'<td><span class="rt-st '+stCls+'"><i data-lucide="'+stIco+'" style="width:12px;height:12px"></i>'+c.status+'</span></td>'
+    +'<td class="rt-num">'+prio+'</td>'
+    +'<td class="rt-num">'+cap+'</td>'
+    +'<td class="rt-num">'+att+'</td>'
+    +'<td class="rt-num">'+asr+'</td>'
+    +'<td class="rt-num">'+acd+'</td>'
+    +'<td class="rt-ip">'+esc(c.remote_ips||'—')+'</td></tr>';
+}
+function renderRoutes(){
+  if(!FLEET||!FLEET.hosts||!FLEET.hosts.length){
+    return '<div class="view"><div class="page-head"><div><h1>Route health</h1><p>Per-carrier status & live outcomes · VOS3000 · read-only</p></div></div>'
+      +'<div class="card"><div class="empty"><div class="ill"><i data-lucide="route"></i></div><h3>Fleet not loaded yet</h3><p>Waiting for the control plane to report hosts.</p></div></div></div>';
+  }
+  const voss=FLEET.hosts.filter(h=>h.role==='VOSS').slice().sort((a,b)=>a.hostname.localeCompare(b.hostname));
+  if(!voss.length){
+    return '<div class="view"><div class="page-head"><div><h1>Route health</h1><p>Per-carrier status & live outcomes · VOS3000 · read-only</p></div></div>'
+      +'<div class="card"><div class="empty"><div class="ill"><i data-lucide="route"></i></div><h3>No VOS3000 boxes in inventory</h3><p>Route health reads carrier config from VOS3000 softswitches — none are present in the current fleet.</p></div></div></div>';
+  }
+  let opts='<option value="">Select a VOS3000 box…</option>'
+    +voss.map(h=>'<option value="'+esc(h.hostname)+'"'+(h.hostname===ROUTE_HOST?' selected':'')+'>'+esc(h.hostname)+' · '+esc(h.ip)+'</option>').join('');
+  return '<div class="view"><div class="page-head"><div><h1>Route health</h1>'
+    +'<p>Per-carrier status, capacity &amp; live outcomes (ASR/ACD) · VOS3000 · read-only</p></div></div>'
+    +'<div class="card log-card"><div class="log-bar">'
+    +'<select class="log-sel" id="rt-host" onchange="loadRoutes()">'+opts+'</select>'
+    +'<button class="btn" id="rt-go" onclick="loadRoutes()"><i data-lucide="refresh-cw"></i>Load</button></div>'
+    +'<div id="rt-pane"><div class="log-hint"><i data-lucide="route"></i>&nbsp; Pick a VOS3000 box to load its carriers &amp; live call outcomes.</div></div>'
+    +'</div></div>';
+}
+async function loadRoutes(){
+  const hs=document.getElementById('rt-host'); if(!hs) return;
+  const host=hs.value; ROUTE_HOST=host;
+  const pane=document.getElementById('rt-pane');
+  if(!host){ pane.innerHTML='<div class="log-hint"><i data-lucide="route"></i>&nbsp; Pick a VOS3000 box to load its carriers.</div>'; icon(); return; }
+  if(ROUTE_BUSY) return; ROUTE_BUSY=true;
+  const btn=document.getElementById('rt-go'), ol=btn.innerHTML; btn.innerHTML='<span class="spin" style="width:14px;height:14px"></span>';
+  pane.innerHTML='<div class="log-hint"><span class="spin"></span>&nbsp; Loading carriers on '+esc(host)+'…</div>'; icon();
+  try{
+    const d=await api('/api/routes/'+encodeURIComponent(host));
+    if(!d.carriers||!d.carriers.length){ pane.innerHTML='<div class="log-hint"><i data-lucide="file-x"></i>&nbsp; No carriers configured on this box.</div>'; icon(); return; }
+    const s=d.summary;
+    let h='<div class="rt-sum"><span>Carriers <b>'+s.total+'</b></span><span>Active <b>'+s.active+'</b></span>'
+      +'<span>With traffic (last '+d.window_min+'m) <b>'+s.with_traffic+'</b></span>'
+      +'<span>'+esc(host)+' · '+esc(d.ip)+'</span></div>';
+    h+='<div style="overflow:auto;max-height:60vh"><table class="rt-tbl"><thead><tr>'
+      +'<th>Carrier</th><th>Status</th><th>Prio</th><th>Capacity</th><th>Attempts</th><th>ASR</th><th>ACD</th><th>Peer IPs</th>'
+      +'</tr></thead><tbody>'+d.carriers.map(rtRow).join('')+'</tbody></table></div>';
+    pane.innerHTML=h; icon();
+  }catch(err){
+    if(err&&err.auth){ showGate('Session expired'); return; }
+    pane.innerHTML='<div class="log-hint" style="color:var(--crit)"><i data-lucide="alert-triangle"></i>&nbsp; '+esc(String(err.message||err))+'</div>'; icon();
+  }finally{ ROUTE_BUSY=false; btn.innerHTML=ol; icon(); }
 }
 /* ══════════════════════════ EMPTY (Phase 2) ══════════════════════════ */
 function renderEmpty(v){
@@ -1181,6 +1330,7 @@ async function refresh(force){
     else if(VIEW==='servers'){ paintServers(); }
     else if(VIEW==='topology'){ drawTopology(); }
     else if(VIEW==='incidents'){ render(); }
+    else if(VIEW==='calls'){ loadCalls(true); }
     else if(VIEW==='alerts'){ render(); }
   }catch(err){
     if(err&&err.auth){ if(refreshTimer)clearInterval(refreshTimer); refreshTimer=null; showGate(TOKEN?'Session expired':''); }

@@ -15,7 +15,7 @@ import time
 from fastapi import Body, Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from . import __build__, __version__, aicontext, db, governor, llm, logs, notifier, prober, remediator
+from . import __build__, __version__, aicontext, calls, db, governor, llm, logs, notifier, prober, remediator, routes
 from .config import settings
 from .inventory import load_hosts
 from .probes import probes_for, roll_up
@@ -219,6 +219,45 @@ async def host_logs(hostname: str, lines: int = logs.LINES_DEFAULT, grep: str = 
         raise HTTPException(status_code=code, detail=msg)
     db.audit("operator", "logs_view", target=hostname,
              detail={"lines": len(result.get("lines", [])), "grep": grep[:80]})
+    return result
+
+
+# ── live calls (Phase 1, read-only fleet-wide snapshot) ──────────────────
+@app.get("/api/calls", dependencies=[Depends(require_token)])
+async def live_calls():
+    """Fleet-wide live call snapshot: concurrent (IVG/OPS) + recent VOS traffic.
+
+    On-demand fan-out over SSH — nothing stored. Each host reports its own
+    honest signal (`concurrent` for FreeSWITCH/OpenSIPS, `recent5m` for VOS3000).
+    """
+    snap = await calls.snapshot()
+    db.audit("operator", "calls_view",
+             detail={"concurrent": snap["totals"]["concurrent"],
+                     "voss_recent5m": snap["totals"]["voss_recent5m"]})
+    snap["ts"] = int(time.time())
+    return snap
+
+
+# ── route health (Phase 1, read-only per-carrier view, VOS3000) ──────────
+@app.get("/api/routes/{hostname}", dependencies=[Depends(require_token)])
+async def route_health(hostname: str):
+    """Per-carrier route status + live outcomes for one VOS3000 box. Read-only.
+
+    404 unknown host · 422 not a VOSS host · 409 no credentials · 502 unreachable/db down.
+    """
+    try:
+        result = await routes.fetch(hostname)
+    except routes.RouteError as e:
+        msg = str(e)
+        code = (404 if msg == "unknown host" else
+                422 if msg.startswith("routes are VOS3000-only") else
+                409 if msg.startswith("no SSH credentials") else
+                502)
+        raise HTTPException(status_code=code, detail=msg)
+    db.audit("operator", "routes_view", target=hostname,
+             detail={"carriers": result["summary"]["total"],
+                     "with_traffic": result["summary"]["with_traffic"]})
+    result["ts"] = int(time.time())
     return result
 
 
