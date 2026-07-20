@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 import time
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException
@@ -197,6 +198,51 @@ async def approve(incident_id: int, body: dict = Body(default={})):
 
 
 # ── AI copilot (Phase 4, local model only, advisory) ─────────────────────
+# Heartbeat interval: how long we'll sit silent before emitting a keep-alive
+# space. Must stay well under Cloudflare's 100s origin timeout.
+_AI_HEARTBEAT = 8
+
+
+async def _sse_like_stream(make_gen):
+    """Bridge a blocking token generator to an async stream with heartbeats.
+
+    `make_gen` is a zero-arg callable returning a *blocking* generator of text
+    chunks (our urllib-based Ollama stream). We run it in a worker thread and
+    pull chunks over a thread-safe queue. Two things defeat the Cloudflare 524
+    here: (1) we emit a byte immediately so the origin's first byte lands in
+    <1s, and (2) we emit a keep-alive space every few seconds while the model
+    is still doing prompt-eval, so Cloudflare never sees a silent gap no matter
+    how large the prompt is. Real tokens then stream continuously once they
+    start. Heartbeat spaces are leading/whitespace only and trimmed client-side.
+    """
+    loop = asyncio.get_running_loop()
+    q: asyncio.Queue = asyncio.Queue()
+    DONE = object()
+
+    def worker():
+        try:
+            for chunk in make_gen():
+                loop.call_soon_threadsafe(q.put_nowait, chunk)
+        except llm.LLMUnavailable as e:
+            loop.call_soon_threadsafe(q.put_nowait, f"\n\n[copilot unavailable: {e}]")
+        except Exception as e:  # noqa: BLE001 — surface, don't hang the stream
+            loop.call_soon_threadsafe(q.put_nowait, f"\n\n[copilot error: {e}]")
+        finally:
+            loop.call_soon_threadsafe(q.put_nowait, DONE)
+
+    threading.Thread(target=worker, daemon=True).start()
+    yield " "  # immediate first byte → Cloudflare starts the response now
+    while True:
+        try:
+            item = await asyncio.wait_for(q.get(), timeout=_AI_HEARTBEAT)
+        except asyncio.TimeoutError:
+            yield " "  # keep-alive during long prompt-eval
+            continue
+        if item is DONE:
+            break
+        yield item
+
+
 @app.post("/api/ask", dependencies=[Depends(require_token)])
 async def ask(body: dict = Body(default={})):
     """Free-form Q&A over the live fleet snapshot. Local model only, read-only.
@@ -212,18 +258,8 @@ async def ask(body: dict = Body(default={})):
         raise HTTPException(status_code=422, detail="question is required")
     context = aicontext.fleet_context()
     db.audit("copilot", "ask", detail={"question": question[:500]})
-
-    def gen():
-        # Tokens flow out as the model produces them: first byte in ~2s, so
-        # Cloudflare's 100s origin timeout never trips no matter how long the
-        # full answer runs. Mid-stream failures surface inline (headers are
-        # already sent, so we can't switch to an HTTP error code here).
-        try:
-            yield from llm.stream_ask(question, context)
-        except llm.LLMUnavailable as e:
-            yield f"\n\n[copilot unavailable: {e}]"
-
-    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
+    stream = _sse_like_stream(lambda: llm.stream_ask(question, context))
+    return StreamingResponse(stream, media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/incidents/{incident_id}/analyze", dependencies=[Depends(require_token)])
@@ -240,14 +276,8 @@ async def analyze(incident_id: int):
         raise HTTPException(status_code=404, detail="unknown incident")
     context = aicontext.incident_context(inc)
     db.audit("copilot", "analyze", target=inc["host_id"], detail={"incident": incident_id})
-
-    def gen():
-        try:
-            yield from llm.stream_analyze(context)
-        except llm.LLMUnavailable as e:
-            yield f"\n\n[copilot unavailable: {e}]"
-
-    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
+    stream = _sse_like_stream(lambda: llm.stream_analyze(context))
+    return StreamingResponse(stream, media_type="text/plain; charset=utf-8")
 
 
 # ── dashboard ────────────────────────────────────────────────────────────

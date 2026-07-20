@@ -20,18 +20,22 @@ def _host_line(h: dict) -> str:
     return f"- {h['id']} [{h['role']}] {h['ip']} -> {status.upper()}: {', '.join(parts) or 'no data'}"
 
 
-def fleet_context(max_hosts: int = 90) -> str:
-    """Whole-fleet snapshot: role tallies + every non-OK host in detail.
+def fleet_context(max_hosts: int = 25) -> str:
+    """Whole-fleet snapshot: role tallies + the worst non-OK hosts in detail.
 
-    OK hosts are collapsed to a count so the prompt stays small and the model
-    focuses on what's actually wrong.
+    OK hosts collapse to a count and only the top `max_hosts` unhealthy hosts
+    (critical before warning) are detailed. This keeps the prompt small — a CPU
+    14B model's prompt-eval time scales with input length, and an oversized
+    context is what pushed first-token latency past Cloudflare's 100s ceiling.
     """
     hosts = db.all_hosts()
     if not hosts:
         return "No hosts in inventory yet."
 
     by_role: dict[str, dict[str, int]] = {}
-    problem_lines: list[str] = []
+    # collect (rank, line) so we can surface the most severe hosts first
+    sev_rank = {"crit": 0, "warn": 1, "unknown": 2}
+    problems: list[tuple[int, str]] = []
     ok_count = 0
     for h in hosts:
         probes = db.latest_probes(h["id"])
@@ -41,16 +45,19 @@ def fleet_context(max_hosts: int = 90) -> str:
         if status == "ok":
             ok_count += 1
         else:
-            problem_lines.append(_host_line(h))
+            problems.append((sev_rank.get(status, 3), _host_line(h)))
 
+    problems.sort(key=lambda t: t[0])
     tally = "; ".join(
         f"{role}: " + ", ".join(f"{k}={v}" for k, v in counts.items() if v)
         for role, counts in sorted(by_role.items())
     )
     out = [f"Fleet: {len(hosts)} hosts. {tally}.", f"Healthy (OK): {ok_count}."]
-    if problem_lines:
-        out.append("Hosts needing attention:")
-        out.extend(problem_lines[:max_hosts])
+    if problems:
+        out.append(f"Hosts needing attention ({len(problems)} total, worst first):")
+        out.extend(line for _, line in problems[:max_hosts])
+        if len(problems) > max_hosts:
+            out.append(f"... and {len(problems) - max_hosts} more degraded hosts (see dashboard).")
     else:
         out.append("No hosts are currently degraded.")
     return "\n".join(out)

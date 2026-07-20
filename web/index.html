@@ -828,7 +828,7 @@ async function analyzeIncident(id,btn){
     +'<div class="ai-foot"><i data-lucide="shield" style="width:11px;height:11px"></i>Advisory only — review before acting. Pulse will not run this.</div>'; icon();
   const txt=box.querySelector('.ai-txt'), caret=box.querySelector('.ai-caret');
   try{
-    await streamPost('/api/incidents/'+id+'/analyze',{},(_c,full)=>{ txt.textContent=full; });
+    await streamPost('/api/incidents/'+id+'/analyze',{},(_c,full)=>{ txt.textContent=full.replace(/^\s+/,''); });
     if(caret) caret.remove();
   }catch(err){
     if(err&&err.auth){ showGate('Session expired'); return; }
@@ -848,7 +848,7 @@ async function askAI(btn){
     +'<div class="ai-foot"><i data-lucide="shield" style="width:11px;height:11px"></i>Grounded on the live fleet snapshot · '+esc(model)+' · no data leaves the box.</div>'; icon();
   const txt=out.querySelector('.ai-txt'), caret=out.querySelector('.ai-caret');
   try{
-    await streamPost('/api/ask',{question:q},(_c,full)=>{ txt.textContent=full; });
+    await streamPost('/api/ask',{question:q},(_c,full)=>{ txt.textContent=full.replace(/^\s+/,''); });
     if(caret) caret.remove();
   }catch(err){
     if(err&&err.auth){ showGate('Session expired'); return; }
