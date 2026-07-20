@@ -50,23 +50,36 @@ def available() -> bool:
     return bool(settings.llm_url)
 
 
-def _generate(system: str, prompt: str) -> str:
+def _ask_prompt(question: str, context: str) -> str:
+    return f"# Fleet data\n{context}\n\n# Question\n{question.strip()}\n\n# Answer"
+
+
+def _analyze_prompt(context: str) -> str:
+    return f"# Incident\n{context}\n\n# Triage"
+
+
+def _request(system: str, prompt: str, stream: bool) -> urllib.request.Request:
     if not available():
         raise LLMUnavailable("no local model configured (PULSE_LLM_URL unset)")
-
     url = settings.llm_url.rstrip("/") + "/api/generate"
     payload = json.dumps({
         "model": settings.llm_model,
         "system": system,
         "prompt": prompt,
-        "stream": False,
+        "stream": stream,
+        # keep the model resident so we never eat a cold-load spike mid-answer
+        "keep_alive": -1,
         "options": {"temperature": 0.2},
     }).encode("utf-8")
-
     headers = {"Content-Type": "application/json"}
     if settings.llm_token:
         headers["Authorization"] = "Bearer " + settings.llm_token
-    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+    return urllib.request.Request(url, data=payload, headers=headers, method="POST")
+
+
+def _generate(system: str, prompt: str) -> str:
+    """Buffered single-shot generation. Kept for tests and non-stream callers."""
+    req = _request(system, prompt, stream=False)
     try:
         with urllib.request.urlopen(req, timeout=settings.llm_timeout) as resp:
             body = resp.read().decode("utf-8", "replace")
@@ -86,13 +99,58 @@ def _generate(system: str, prompt: str) -> str:
     return text
 
 
+def _stream(system: str, prompt: str):
+    """Yield response text chunks as the model generates them.
+
+    Ollama streams newline-delimited JSON objects, each with a partial
+    ``response`` field and a final ``{"done": true}``. Emitting each chunk the
+    moment it lands means the first byte reaches the client in ~2s instead of
+    ~100s — which is what keeps Cloudflare from tripping its origin timeout on
+    long CPU-bound answers.
+    """
+    req = _request(system, prompt, stream=True)
+    try:
+        resp = urllib.request.urlopen(req, timeout=settings.llm_timeout)
+    except urllib.error.URLError as e:
+        raise LLMUnavailable(f"local model unreachable at {settings.llm_url}: {e}") from e
+
+    emitted = False
+    with resp:
+        for raw in resp:
+            line = raw.decode("utf-8", "replace").strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if obj.get("error"):
+                raise LLMUnavailable(f"local model error: {obj['error']}")
+            piece = obj.get("response") or ""
+            if piece:
+                emitted = True
+                yield piece
+            if obj.get("done"):
+                break
+    if not emitted:
+        raise LLMUnavailable("local model returned an empty response")
+
+
 def ask(question: str, context: str) -> str:
-    """Free-form Q&A grounded on the supplied non-secret fleet context."""
-    prompt = f"# Fleet data\n{context}\n\n# Question\n{question.strip()}\n\n# Answer"
-    return _generate(SYSTEM_ASK, prompt)
+    """Free-form Q&A grounded on the supplied non-secret fleet context (buffered)."""
+    return _generate(SYSTEM_ASK, _ask_prompt(question, context))
 
 
 def analyze_incident(context: str) -> str:
-    """Triage one needs-human incident from its non-secret context block."""
-    prompt = f"# Incident\n{context}\n\n# Triage"
-    return _generate(SYSTEM_ANALYZE, prompt)
+    """Triage one needs-human incident from its non-secret context block (buffered)."""
+    return _generate(SYSTEM_ANALYZE, _analyze_prompt(context))
+
+
+def stream_ask(question: str, context: str):
+    """Streaming Q&A — yields text chunks as they generate."""
+    yield from _stream(SYSTEM_ASK, _ask_prompt(question, context))
+
+
+def stream_analyze(context: str):
+    """Streaming incident triage — yields text chunks as they generate."""
+    yield from _stream(SYSTEM_ANALYZE, _analyze_prompt(context))

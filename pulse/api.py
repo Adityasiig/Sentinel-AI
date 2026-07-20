@@ -12,7 +12,7 @@ import os
 import time
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from . import __version__, aicontext, db, governor, llm, prober, remediator
 from .config import settings
@@ -211,12 +211,19 @@ async def ask(body: dict = Body(default={})):
     if not question:
         raise HTTPException(status_code=422, detail="question is required")
     context = aicontext.fleet_context()
-    try:
-        answer = await asyncio.to_thread(llm.ask, question, context)
-    except llm.LLMUnavailable as e:
-        raise HTTPException(status_code=503, detail=str(e))
     db.audit("copilot", "ask", detail={"question": question[:500]})
-    return {"question": question, "answer": answer, "model": settings.llm_model, "ts": int(time.time())}
+
+    def gen():
+        # Tokens flow out as the model produces them: first byte in ~2s, so
+        # Cloudflare's 100s origin timeout never trips no matter how long the
+        # full answer runs. Mid-stream failures surface inline (headers are
+        # already sent, so we can't switch to an HTTP error code here).
+        try:
+            yield from llm.stream_ask(question, context)
+        except llm.LLMUnavailable as e:
+            yield f"\n\n[copilot unavailable: {e}]"
+
+    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/incidents/{incident_id}/analyze", dependencies=[Depends(require_token)])
@@ -232,13 +239,15 @@ async def analyze(incident_id: int):
     if not inc:
         raise HTTPException(status_code=404, detail="unknown incident")
     context = aicontext.incident_context(inc)
-    try:
-        triage = await asyncio.to_thread(llm.analyze_incident, context)
-    except llm.LLMUnavailable as e:
-        raise HTTPException(status_code=503, detail=str(e))
     db.audit("copilot", "analyze", target=inc["host_id"], detail={"incident": incident_id})
-    return {"incident": incident_id, "host": inc["host_id"], "triage": triage,
-            "model": settings.llm_model, "ts": int(time.time())}
+
+    def gen():
+        try:
+            yield from llm.stream_analyze(context)
+        except llm.LLMUnavailable as e:
+            yield f"\n\n[copilot unavailable: {e}]"
+
+    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
 
 
 # ── dashboard ────────────────────────────────────────────────────────────
