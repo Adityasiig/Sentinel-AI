@@ -69,6 +69,14 @@ CREATE TABLE IF NOT EXISTS audit (
     detail_json TEXT NOT NULL DEFAULT '{}',
     ts          REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id INTEGER NOT NULL,
+    event       TEXT NOT NULL,             -- opened | resolved
+    ts          REAL NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_once ON notifications (incident_id, event);
 """
 
 
@@ -247,6 +255,57 @@ def recent_actions(limit: int = 50) -> list[dict]:
         (limit,),
     ).fetchall()
     return [_row(r) for r in rows]
+
+
+# ── notifications / alerting (Phase 5) ───────────────────────────────────
+def pending_open_alerts() -> list[dict]:
+    """Live incidents (open | needs-human) that have never been alerted 'opened'.
+
+    Left-join against notifications so a persistent failure pages exactly once,
+    not every 60s sweep. Includes host ip/role for a rich alert body.
+    """
+    rows = conn().execute(
+        "SELECT i.id, i.host_id, i.kind, i.status, i.opened_ts, h.ip, h.role "
+        "FROM incidents i JOIN hosts h ON h.id = i.host_id "
+        "LEFT JOIN notifications n ON n.incident_id = i.id AND n.event = 'opened' "
+        "WHERE i.status != 'resolved' AND n.id IS NULL "
+        "ORDER BY i.opened_ts ASC",
+    ).fetchall()
+    return [_row(r) for r in rows]
+
+
+def pending_resolved_alerts() -> list[dict]:
+    """Incidents that resolved and were alerted 'opened' but not yet 'resolved'.
+
+    Only recover-notify things we actually paged for — avoids a 'resolved' ping
+    for a blip that never crossed the alert threshold in the first place.
+    """
+    rows = conn().execute(
+        "SELECT i.id, i.host_id, i.kind, i.status, i.opened_ts, i.closed_ts, h.ip, h.role "
+        "FROM incidents i JOIN hosts h ON h.id = i.host_id "
+        "JOIN notifications o ON o.incident_id = i.id AND o.event = 'opened' "
+        "LEFT JOIN notifications r ON r.incident_id = i.id AND r.event = 'resolved' "
+        "WHERE i.status = 'resolved' AND r.id IS NULL "
+        "ORDER BY i.closed_ts ASC",
+    ).fetchall()
+    return [_row(r) for r in rows]
+
+
+def record_notification(incident_id: int, event: str) -> bool:
+    """Mark an incident/event as alerted. Returns False if already recorded.
+
+    The UNIQUE(incident_id, event) index makes this the idempotency guard: two
+    concurrent sweeps can't double-page the same transition.
+    """
+    try:
+        with tx() as c:
+            c.execute(
+                "INSERT INTO notifications (incident_id, event, ts) VALUES (?,?,?)",
+                (incident_id, event, time.time()),
+            )
+        return True
+    except sqlite3.IntegrityError:
+        return False
 
 
 # ── reads ────────────────────────────────────────────────────────────────

@@ -314,6 +314,13 @@ button{font-family:inherit}
 .fix-verify{padding:8px 15px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:7px}
 .inc-nofix{margin-top:13px;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--unknown);background:rgba(100,116,139,.07);border:1px dashed rgba(100,116,139,.3);border-radius:11px;padding:11px 14px}
 .navcount{font-size:9px;font-weight:800;color:var(--crit);background:rgba(244,63,94,.14);border:1px solid rgba(244,63,94,.28);padding:2px 6px;border-radius:6px}
+/* ── Alerts ── */
+.al-grid{grid-template-columns:1.3fr 1fr}
+@media(max-width:820px){.al-grid{grid-template-columns:1fr}}
+.mini-h{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
+.mini-h svg{width:15px;height:15px}
+.ch-pill{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 13px;border-radius:9px;background:var(--card-hover);border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--text)}
+.ch-dot{width:8px;height:8px;border-radius:50%}
 /* ── AI Copilot ── */
 .ai-card{padding:20px}
 .ai-model{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
@@ -383,6 +390,7 @@ button{font-family:inherit}
       <div class="nav-item" data-view="routes" onclick="go('routes')"><i data-lucide="route"></i><span class="txt">Routes</span><span class="soon">SOON</span></div>
       <div class="side-label">Intelligence</div>
       <div class="nav-item" data-view="ai" onclick="go('ai')"><i data-lucide="sparkles"></i><span class="txt">AI Copilot</span></div>
+      <div class="nav-item" data-view="alerts" onclick="go('alerts')"><i data-lucide="bell-ring"></i><span class="txt">Alerts</span></div>
       <div class="side-foot">
         <div class="collapse-btn" onclick="toggleSide()"><i data-lucide="chevrons-left"></i><span class="txt">Collapse</span></div>
       </div>
@@ -511,6 +519,7 @@ function render(){
   else if(VIEW==='topology') { m.innerHTML=renderTopologyShell(); drawTopology(); }
   else if(VIEW==='incidents')m.innerHTML=renderIncidents();
   else if(VIEW==='ai')       m.innerHTML=renderCopilot();
+  else if(VIEW==='alerts')   m.innerHTML=renderAlerts();
   else                       m.innerHTML=renderEmpty(VIEW);
   icon();
   if(VIEW==='overview' && FLEET) paintOverviewCounts();
@@ -875,6 +884,61 @@ function renderCopilot(){
     +'<div class="ai-answer hidden" id="ai-answer"></div></div></div>';
   return h;
 }
+/* ══════════════════════════ ALERTS ══════════════════════════ */
+const CH_META={
+  slack:['slack','Slack','#4A154B'],discord:['message-circle','Discord','#5865F2'],
+  telegram:['send','Telegram','#229ED9'],webhook:['webhook','Webhook','#4F7CFF']};
+function renderAlerts(){
+  const a=STATUS&&STATUS.alerting||{};
+  const chans=a.channels||[];
+  let h='<div class="view"><div class="page-head"><div><h1>Alerts</h1>'
+    +'<p>Get paged the moment an incident opens — and a recovery ping when it clears · read-only, Pulse never touches a box to notify you</p></div></div>';
+  if(!a.available){
+    h+='<div class="card"><div class="empty"><div class="ill"><i data-lucide="bell-off"></i></div>'
+      +'<h3>No alert channels connected</h3><p>Wire a channel and Pulse starts paging on every incident open/resolve. Set one of:</p>'
+      +'<div style="text-align:left;max-width:520px;margin:14px auto 0;font-size:13px;color:var(--muted);line-height:2">'
+      +'<div><code>PULSE_ALERT_WEBHOOK</code> — Slack, Discord, or any incoming webhook</div>'
+      +'<div><code>PULSE_TELEGRAM_TOKEN</code> + <code>PULSE_TELEGRAM_CHAT</code> — Telegram bot</div></div>'
+      +'<div class="phase" style="margin-top:16px"><i data-lucide="shield-check" style="width:13px;height:13px"></i>Notify-only · deduped · read-only</div></div></div></div>';
+    return h;
+  }
+  const sev=(a.min_severity||'critical');
+  const sevCol={critical:'var(--crit)',warning:'var(--warn)',info:'var(--info)'}[sev]||'var(--crit)';
+  h+='<div class="grid al-grid" style="margin-bottom:22px">'
+    +'<div class="card"><div class="mini-h"><i data-lucide="radio"></i>Armed channels</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px">';
+  for(const c of chans){ const m=CH_META[c]||['bell-ring',c,'#4F7CFF'];
+    h+='<span class="ch-pill" style="border-color:'+m[2]+'55"><span class="ch-dot" style="background:'+m[2]+'"></span>'
+      +'<i data-lucide="'+m[0]+'" style="width:14px;height:14px"></i>'+esc(m[1])+'</span>'; }
+  h+='</div></div>'
+    +'<div class="card"><div class="mini-h"><i data-lucide="filter"></i>Alert threshold</div>'
+    +'<div style="margin-top:10px;font-size:14px">Paging on <b style="color:'+sevCol+';text-transform:capitalize">'+esc(sev)+'</b> and above.</div>'
+    +'<div style="color:var(--muted);font-size:12.5px;margin-top:6px">needs-human incidents always page. Tune with <code>PULSE_ALERT_MIN_SEVERITY</code>.</div>'
+    +'</div></div>';
+  h+='<div class="card"><div class="mini-h"><i data-lucide="bell-ring"></i>Test delivery</div>'
+    +'<p style="color:var(--muted);font-size:13px;margin:8px 0 14px">Fire a synthetic alert to every armed channel to confirm the wiring end-to-end.</p>'
+    +'<button class="btn primary" id="alert-test" onclick="sendTestAlert(this)"><i data-lucide="send"></i>Send test alert</button>'
+    +'<div class="ai-answer hidden" id="alert-result" style="margin-top:16px"></div></div>';
+  return h;
+}
+async function sendTestAlert(btn){
+  btn.disabled=true; const old=btn.innerHTML;
+  btn.innerHTML='<span class="spin" style="width:14px;height:14px"></span>Sending…';
+  const box=document.getElementById('alert-result'); box.classList.remove('hidden');
+  try{
+    const r=await fetch('/api/alerts/test',{method:'POST',headers:{...hdrs(),'Content-Type':'application/json'}});
+    if(r.status===401){ showGate('Session expired'); return; }
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail||('http '+r.status));
+    const sent=(d.sent||[]);
+    if(sent.length){ box.innerHTML='<span style="color:var(--ok)"><b>Delivered</b> to '+sent.map(esc).join(', ')+'. Check the channel.</span>';
+      toast('ok','Test alert sent','Delivered to '+sent.join(', ')); }
+    else { box.innerHTML='<span style="color:var(--warn)">No channel accepted the message — check the webhook URL / bot token.</span>';
+      toast('warn','Not delivered','Every channel rejected the send'); }
+  }catch(err){ box.innerHTML='<span style="color:var(--crit)">'+esc(String(err.message||err))+'</span>';
+    toast('crit','Test failed',String(err.message||err)); }
+  finally{ btn.disabled=false; btn.innerHTML=old; icon(); }
+}
 /* ══════════════════════════ DRAWER ══════════════════════════ */
 async function openHost(name){
   const d=document.getElementById('drawer');
@@ -1050,6 +1114,7 @@ async function refresh(force){
     else if(VIEW==='servers'){ paintServers(); }
     else if(VIEW==='topology'){ drawTopology(); }
     else if(VIEW==='incidents'){ render(); }
+    else if(VIEW==='alerts'){ render(); }
   }catch(err){
     if(err&&err.auth){ if(refreshTimer)clearInterval(refreshTimer); refreshTimer=null; showGate(TOKEN?'Session expired':''); }
   }

@@ -15,7 +15,7 @@ import time
 from fastapi import Body, Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from . import __build__, __version__, aicontext, db, governor, llm, prober, remediator
+from . import __build__, __version__, aicontext, db, governor, llm, notifier, prober, remediator
 from .config import settings
 from .inventory import load_hosts
 from .probes import probes_for, roll_up
@@ -61,6 +61,11 @@ async def status():
         "incidents": st.get("incidents", 0),
         "governor": governor.status(),
         "ai": {"available": llm.available(), "model": settings.llm_model if llm.available() else None},
+        "alerting": {
+            "available": notifier.available(),
+            "channels": notifier.channels_configured(),
+            "min_severity": settings.alert_min_severity,
+        },
     }
 
 
@@ -195,6 +200,17 @@ async def approve(incident_id: int, body: dict = Body(default={})):
 
     result = await remediator.execute(inc, pb, host, approver)
     return {"incident": incident_id, "playbook": pb.id, "host": inc["host_id"], **result}
+
+
+# ── alerting (Phase 5, read-only notifications) ──────────────────────────
+@app.post("/api/alerts/test", dependencies=[Depends(require_token)])
+async def alerts_test():
+    """Fire a synthetic alert to every armed channel. 503 if none configured."""
+    if not notifier.available():
+        raise HTTPException(status_code=503, detail="alerting disabled: no channels configured (PULSE_ALERT_WEBHOOK / PULSE_TELEGRAM_*)")
+    db.audit("operator", "alert_test", detail={"channels": notifier.channels_configured()})
+    result = await asyncio.to_thread(notifier.send_test)
+    return result
 
 
 # ── AI copilot (Phase 4, local model only, advisory) ─────────────────────

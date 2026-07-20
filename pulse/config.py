@@ -55,6 +55,18 @@ class Settings:
     # of Ollama). Unset => no Authorization header sent.
     llm_token: str = os.environ.get("PULSE_LLM_TOKEN", "").strip()
 
+    # ── alerting (Phase 5) ───────────────────────────────────────────────
+    # Proactive notifications when incidents open/resolve. All channels are
+    # opt-in via env; unset => feature off and the tab degrades gracefully.
+    # Generic/Slack/Discord incoming webhook (auto-detected by URL shape).
+    alert_webhook: str = os.environ.get("PULSE_ALERT_WEBHOOK", "").strip()
+    # Telegram bot: both token and chat id required to arm the channel.
+    telegram_token: str = os.environ.get("PULSE_TELEGRAM_TOKEN", "").strip()
+    telegram_chat: str = os.environ.get("PULSE_TELEGRAM_CHAT", "").strip()
+    # Only page for incidents at/above this severity. critical | warning | info.
+    # 'critical' also covers needs-human (a crit probe with no vetted playbook).
+    alert_min_severity: str = os.environ.get("PULSE_ALERT_MIN_SEVERITY", "critical").strip().lower()
+
     # ── credentials (injected; never committed) ──────────────────────────
     # Per-role SSH users + shared passwords for IVG/OPS, per-box JSON for VOSS.
     creds: dict = field(default_factory=dict)

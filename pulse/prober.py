@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from . import db, diagnoser
+from . import db, diagnoser, notifier
 from .config import settings
 from .inventory import Host, load_hosts
 from .probes import probes_for
@@ -60,6 +60,16 @@ async def sweep_once() -> dict:
     except Exception as e:  # noqa: BLE001 — advisor must never break the sweep
         adv = {"error": str(e)}
         print(f"[diagnoser] error: {e}", flush=True)
+
+    # Phase 5: page on new incident open/resolve transitions. Blocking urllib
+    # sends run off-loop so a slow webhook can't stall the sweep; dedup lives in
+    # the DB so this is a no-op when nothing changed.
+    try:
+        alerts = await asyncio.to_thread(notifier.process)
+        if alerts.get("opened") or alerts.get("resolved"):
+            print(f"[notifier] {alerts}", flush=True)
+    except Exception as e:  # noqa: BLE001 — alerting must never break the sweep
+        print(f"[notifier] error: {e}", flush=True)
 
     ms = int((time.time() - t0) * 1000)
     _STATE.update(last_sweep=ts, sweep_ms=ms, incidents=adv.get("open", 0))
