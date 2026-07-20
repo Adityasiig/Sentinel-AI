@@ -14,7 +14,7 @@ import time
 from fastapi import Body, Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from . import __version__, aicontext, db, governor, llm, prober, remediator
+from . import __build__, __version__, aicontext, db, governor, llm, prober, remediator
 from .config import settings
 from .inventory import load_hosts
 from .probes import probes_for, roll_up
@@ -44,7 +44,7 @@ async def _startup():
 # ── public ───────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": __version__}
+    return {"status": "ok", "version": __version__, "build": __build__}
 
 
 @app.get("/api/status", dependencies=[Depends(require_token)])
