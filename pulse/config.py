@@ -51,6 +51,9 @@ class Settings:
     llm_url: str = os.environ.get("PULSE_LLM_URL", "").strip()
     llm_model: str = os.environ.get("PULSE_LLM_MODEL", "llama3.1:8b").strip()
     llm_timeout: int = _int("PULSE_LLM_TIMEOUT", 180)  # CPU 7B/8B inference is slow
+    # Optional bearer for a token-gated model endpoint (our auth proxy in front
+    # of Ollama). Unset => no Authorization header sent.
+    llm_token: str = os.environ.get("PULSE_LLM_TOKEN", "").strip()
 
     # ── credentials (injected; never committed) ──────────────────────────
     # Per-role SSH users + shared passwords for IVG/OPS, per-box JSON for VOSS.

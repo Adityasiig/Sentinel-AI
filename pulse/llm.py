@@ -63,9 +63,10 @@ def _generate(system: str, prompt: str) -> str:
         "options": {"temperature": 0.2},
     }).encode("utf-8")
 
-    req = urllib.request.Request(
-        url, data=payload, headers={"Content-Type": "application/json"}, method="POST"
-    )
+    headers = {"Content-Type": "application/json"}
+    if settings.llm_token:
+        headers["Authorization"] = "Bearer " + settings.llm_token
+    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=settings.llm_timeout) as resp:
             body = resp.read().decode("utf-8", "replace")
